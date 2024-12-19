@@ -44,6 +44,7 @@ def check_api_health() -> None:
         logging.error(f"API health check failed: {str(e)}")
         sys.exit(1)
 
+
 @task(task_id='get_file_list')
 def get_files() -> list[str]:
     logging.info("Executing get_files() task")

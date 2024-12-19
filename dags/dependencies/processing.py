@@ -9,10 +9,10 @@ import yaml
 def get_file_list(site: str) -> list[str]:
 
 
-    logging.info("Trying to get API health status")
+    logging.info("Trying to get list of files")
     try:
         # Get YAML data
-        with open('./config/site_config.yml', 'r') as site_config_file:
+        with open('/home/airflow/gcs/dags/config/site_config.yml', 'r') as site_config_file:
             config = yaml.safe_load(site_config_file)
         
         gcs_bucket = config['site'][site]['gcs_path']
