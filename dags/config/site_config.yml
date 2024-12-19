@@ -1,0 +1,7 @@
+site: synthea
+  display_name: Synthea Synthetic Data
+  project_id: nih-nci-dceg-connect-dev
+  gcs_path: gs://synthea_datasets/synthea_100_omop_53/
+  bq_omop_table: synthea_cdm53
+  file_delivery_format: .csv
+  
