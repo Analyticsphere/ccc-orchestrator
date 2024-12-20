@@ -2,28 +2,24 @@ from . import constants
 import requests
 import subprocess
 import logging
-from logging import Logger
 import sys
 import yaml
 
-def logger() -> Logger:
-    """
-    Set up a logging instance that will write to Google Cloud logs
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-
-    logger = logging.getLogger(__name__)
-    return logger
+"""
+Set up a logging instance that will write to stdout (and therefor show up in Google Cloud logs)
+"""
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+# Create the logger at module level so its settings are applied throughout code base
+logger = logging.getLogger(__name__)
 
 def get_gcloud_token() -> str:
     """
     Get identity token from gcloud CLI
     """
-    logger().info("Getting GCloud token")
     try:
         # subprocess runs a system command; using it to obtain and then return token
         token = subprocess.check_output(
@@ -32,14 +28,14 @@ def get_gcloud_token() -> str:
         ).strip()
         return token
     except subprocess.CalledProcessError as e:
-        logger().error(f"Failed to get gcloud token: {e}")
+        logger.error(f"Failed to get gcloud token: {e}")
         sys.exit(1)
     
 def check_service_health(base_url):
     """
     Call the heartbeat endpoint to check service health.
     """
-    logger().info("Trying to get API health status")
+    logger.info("Trying to get API health status")
     try:
         # Get the token
         token = get_gcloud_token()
@@ -58,10 +54,10 @@ def check_service_health(base_url):
         return response.json()
         
     except subprocess.CalledProcessError as e:
-        logger().error(f"Error getting authentication token: {e}")
+        logger.error(f"Error getting authentication token: {e}")
         sys.exit(1)
     except requests.exceptions.RequestException as e:
-        logger().error(f"Error checking service health: {e}")
+        logger.error(f"Error checking service health: {e}")
         sys.exit(1)
 
 def site_config() -> dict:
@@ -74,7 +70,7 @@ def site_config() -> dict:
 
         return config
     except Exception as e:
-        logger().error(f"Unable to get site configuration file: {e}")
+        logger.error(f"Unable to get site configuration file: {e}")
         sys.exit(1)
 
 def remove_date_prefix(file_name: str) -> str:

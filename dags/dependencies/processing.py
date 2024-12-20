@@ -15,8 +15,8 @@ def get_file_list(site: str) -> list[str]:
     try:
         gcs_bucket = utils.site_config()['site'][site]['gcs_path']
         delivery_date = get_most_recent_folder(site)
-        
-        utils.logger().info(f"Getting files for {delivery_date} delivery from {site}")
+
+        utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
         
         # Set up headers with bearer token
         headers = {'Authorization': f'Bearer {utils.get_gcloud_token()}'}
