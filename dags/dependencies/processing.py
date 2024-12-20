@@ -4,27 +4,22 @@ import logging
 import sys
 import requests
 import subprocess
-import yaml
+from google.cloud import storage
+from datetime import datetime
+
 
 def get_file_list(site: str) -> list[str]:
-
-
-    logging.info("Trying to get list of files")
+    """
+    Get a list of files from a site's latest delivery
+    """
     try:
-        # Get YAML data
-        with open('/home/airflow/gcs/dags/config/site_config.yml', 'r') as site_config_file:
-            config = yaml.safe_load(site_config_file)
+        gcs_bucket = utils.site_config()['site'][site]['gcs_path']
+        delivery_date = get_most_recent_folder(site)
         
-        gcs_bucket = config['site'][site]['gcs_path']
-        delivery_date = '2024-11-25'
-
-        # Get the token
-        token = utils.get_gcloud_token()
+        utils.logger().info(f"Getting files for {delivery_date} delivery from {site}")
         
         # Set up headers with bearer token
-        headers = {
-            'Authorization': f'Bearer {token}'
-        }
+        headers = {'Authorization': f'Bearer {utils.get_gcloud_token()}'}
 
         # Make the authenticated request
         response = requests.get(
@@ -32,7 +27,11 @@ def get_file_list(site: str) -> list[str]:
             headers=headers
         )
         response.raise_for_status()
-        return response.json()
+
+        filenames = response.json()['file_list']
+        cleaned_filenames = [utils.remove_date_prefix(f) for f in filenames]
+
+        return cleaned_filenames
         
     except subprocess.CalledProcessError as e:
         logging.error(f"Error getting authentication token: {e}")
@@ -41,3 +40,43 @@ def get_file_list(site: str) -> list[str]:
         logging.error(f"Error getting file list: {e}")
         sys.exit(1)
     return []
+
+def get_most_recent_folder(site: str) -> str:
+    """
+    Find the most recent date-formatted folder in a GCS bucket.
+    """
+    gcs_bucket = utils.site_config()['site'][site]['gcs_path']
+
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(gcs_bucket)
+
+    # Get all blobs
+    blobs = list(bucket.list_blobs())
+    
+    # Extract unique top-level folder names
+    top_level_folders = set()
+    for blob in blobs:
+        # Split the path and take the first segment
+        parts = blob.name.split('/')
+        if parts and parts[0]:  # Make sure we have a non-empty first segment
+            top_level_folders.add(parts[0])
+    
+    most_recent_date = None
+    most_recent_folder = None
+    
+    # Check each folder
+    for folder_name in top_level_folders:
+        try:
+            # Try to parse the folder name as a date
+            folder_date = datetime.strptime(folder_name, '%Y-%m-%d')
+            
+            # Update most recent if this is the first or a more recent date
+            if most_recent_date is None or folder_date > most_recent_date:
+                most_recent_date = folder_date
+                most_recent_folder = folder_name
+                
+        except ValueError:
+            # Skip folders that don't match our date format
+            continue
+
+    return most_recent_folder

@@ -1,13 +1,29 @@
+from . import constants
 import requests
 import subprocess
 import logging
+from logging import Logger
 import sys
+import yaml
+
+def logger() -> Logger:
+    """
+    Set up a logging instance that will write to Google Cloud logs
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+
+    logger = logging.getLogger(__name__)
+    return logger
 
 def get_gcloud_token() -> str:
     """
-    Get identity token from gcloud CLI.
+    Get identity token from gcloud CLI
     """
-    logging.info("Getting GCloud token")
+    logger().info("Getting GCloud token")
     try:
         # subprocess runs a system command; using it to obtain and then return token
         token = subprocess.check_output(
@@ -16,14 +32,14 @@ def get_gcloud_token() -> str:
         ).strip()
         return token
     except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to get gcloud token: {e}")
+        logger().error(f"Failed to get gcloud token: {e}")
         sys.exit(1)
     
 def check_service_health(base_url):
     """
     Call the heartbeat endpoint to check service health.
     """
-    logging.info("Trying to get API health status")
+    logger().info("Trying to get API health status")
     try:
         # Get the token
         token = get_gcloud_token()
@@ -42,8 +58,27 @@ def check_service_health(base_url):
         return response.json()
         
     except subprocess.CalledProcessError as e:
-        logging.error(f"Error getting authentication token: {e}")
+        logger().error(f"Error getting authentication token: {e}")
         sys.exit(1)
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error checking service health: {e}")
+        logger().error(f"Error checking service health: {e}")
         sys.exit(1)
+
+def site_config() -> dict:
+    """
+    Return the site configuration YAML file as a dictionary
+    """
+    try:
+        with open(constants.SITE_CONFIG_YML_PATH, 'r') as site_config_file:
+            config = yaml.safe_load(site_config_file)
+
+        return config
+    except Exception as e:
+        logger().error(f"Unable to get site configuration file: {e}")
+        sys.exit(1)
+
+def remove_date_prefix(file_name: str) -> str:
+    """
+    Removes date prefix from files pulled from EHR OMOP GCS buckets
+    """
+    return file_name.split('/')[-1]
