@@ -34,7 +34,7 @@ def check_api_health() -> None:
             utils.logger.error(f"API health check failed. Status: {result['status']}")
             sys.exit(1)
 
-        utils.logger.info(f"The API is healthy! Reponse: {result}")
+        utils.logger.info(f"The API is healthy! Response: {result}")
     except Exception as e:
         utils.logger.error(f"API health check failed: {str(e)}")
         sys.exit(1)
@@ -48,17 +48,18 @@ def get_files() -> list[str]:
     try:
         result = processing.get_file_list(site)
         utils.logger.info(f"Files for {site} are: {result}")
+        return result
     except Exception as e:
         utils.logger.error(f"Unable to get file list: {str(e)}")
         sys.exit(1)
-    print()
 
-@task(task_id='print_each_file_name')
-def print_file_names(var: list[str]) -> None:
-    print()
+@task(max_active_tis_per_dag=10)
+def print_file_names(filename: str) -> None:
+    utils.logger.info(f"The file name is {filename}")
 
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
+    print_names = print_file_names.expand(filename=file_list)
 
-api_health_check >> file_list
+api_health_check >> file_list >> print_names
