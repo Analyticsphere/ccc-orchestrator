@@ -42,7 +42,7 @@ def check_api_health() -> None:
 
 
 @task(task_id='get_file_list')
-def get_files() -> list[file_config.FileConfig]:
+def get_files() -> list[dict]:
     utils.logger.info("Executing get_files() task")
     
     try:
