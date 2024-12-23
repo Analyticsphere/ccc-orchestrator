@@ -67,9 +67,15 @@ def get_files() -> list[file_config.FileConfig]:
 def print_file_info(file_config: dict) -> None:
     utils.logger.info(f"The file info is {file_config}")
 
+@task(max_active_tis_per_dag=10)
+def dummy_testing_task(file_config: dict) -> None:
+    utils.logger.info(f"Going to validate schema of gs://{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']} against OMOP v{file_config['omop_version']}")
+    utils.logger.info(f"Will write to BQ dataset {file_config['project_id']}.{file_config['bq_table']}")
+
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
     print_info = print_file_info.expand(file_config=file_list)
+    dummy_info = dummy_testing_task.expand(file_config=file_list)
 
-api_health_check >> file_list >> print_info
+api_health_check >> file_list >> print_info >> dummy_info
