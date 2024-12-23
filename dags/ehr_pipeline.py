@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import dependencies.utils as utils
 import dependencies.constants as constants
 import dependencies.processing as processing
+import dependencies.file_config as file_config
 import sys
 
 default_args = {
@@ -41,25 +42,34 @@ def check_api_health() -> None:
 
 
 @task(task_id='get_file_list')
-def get_files() -> list[str]:
+def get_files() -> list[file_config.FileConfig]:
     utils.logger.info("Executing get_files() task")
-    site = 'synthea'
-
+    
     try:
-        result = processing.get_file_list(site)
-        utils.logger.info(f"Files for {site} are: {result}")
-        return result
+        config = utils.get_site_config_file()
+        sites = list(config['site'].keys())
+
+        file_configs: list[dict] = []
+
+        for site in sites:
+            files = processing.get_file_list(site)
+            for file in files:
+                file_config_obj = file_config.FileConfig(site, file)
+                file_configs.append(file_config_obj.to_dict())
+        
+        return file_configs
+    
     except Exception as e:
         utils.logger.error(f"Unable to get file list: {str(e)}")
         sys.exit(1)
 
 @task(max_active_tis_per_dag=10)
-def print_file_names(filename: str) -> None:
-    utils.logger.info(f"The file name is {filename}")
+def print_file_info(file_config: dict) -> None:
+    utils.logger.info(f"The file info is {file_config}")
 
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
-    print_names = print_file_names.expand(filename=file_list)
+    print_info = print_file_info.expand(file_config=file_list)
 
-api_health_check >> file_list >> print_names
+api_health_check >> file_list >> print_info

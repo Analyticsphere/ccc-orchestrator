@@ -29,9 +29,10 @@ def get_file_list(site: str) -> list[str]:
         response.raise_for_status()
 
         filenames = response.json()['file_list']
-        cleaned_filenames = [utils.remove_date_prefix(f) for f in filenames]
+        # Leave date prefix in names so that it can be used downstream of this function
+        #filenames = [utils.remove_date_prefix(f) for f in filenames]
 
-        return cleaned_filenames
+        return filenames
         
     except subprocess.CalledProcessError as e:
         logging.error(f"Error getting authentication token: {e}")

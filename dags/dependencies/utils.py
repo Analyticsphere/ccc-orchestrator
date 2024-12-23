@@ -75,6 +75,13 @@ def get_site_config_file() -> dict:
 
 def remove_date_prefix(file_name: str) -> str:
     """
-    Removes date prefix from files pulled from EHR OMOP GCS buckets
+    Removes date prefix from files pulled from EHR OMOP GCS buckets in format YYYY-MM-DD/file_name.csv
     """
     return file_name.split('/')[-1]
+
+def get_date_prefix(file_name: str) -> str:
+    """
+    Extracts date prefix from files in format YYYY-MM-DD/file_name.csv
+    Returns the YYYY-MM-DD portion
+    """
+    return file_name.split('/')[0]
