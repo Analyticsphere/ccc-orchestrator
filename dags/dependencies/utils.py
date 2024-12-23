@@ -60,7 +60,7 @@ def check_service_health(base_url):
         logger.error(f"Error checking service health: {e}")
         sys.exit(1)
 
-def site_config() -> dict:
+def get_site_config_file() -> dict:
     """
     Return the site configuration YAML file as a dictionary
     """

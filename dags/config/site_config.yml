@@ -1,7 +1,15 @@
 site:
-  'synthea':
+  'synthea_53':
     display_name: 'Synthea Synthetic Data'
     project_id: 'nih-nci-dceg-connect-dev'
     gcs_path: 'synthea_cdm53'
     bq_omop_table: 'synthea_cdm53'
     file_delivery_format: '.csv'
+    omop_version: '5.3'
+  'synthea_54':
+    display_name: 'Synthea Synthetic Data'
+    project_id: 'nih-nci-dceg-connect-dev'
+    gcs_path: 'synthea_cdm54'
+    bq_omop_table: 'synthea_cdm54'
+    file_delivery_format: '.csv'
+    omop_version: '5.4'
