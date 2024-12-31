@@ -62,6 +62,13 @@ def check_service_health(base_url: str) -> dict:
         logger.error(f"Error checking service health: {e}")
         sys.exit(1)
 
+def get_site_bucket(site: str) -> str:
+    """
+    Return the parent GCS bucket for a given site
+    """
+    return get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
+
+
 def get_site_config_file() -> dict:
     """
     Return the site configuration YAML file as a dictionary

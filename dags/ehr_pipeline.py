@@ -10,6 +10,7 @@ import dependencies.file_config as file_config
 import sys
 
 
+
 default_args = {
     'start_date': airflow.utils.dates.days_ago(0),
     'retries': 1,
@@ -48,15 +49,15 @@ def get_files() -> list[dict]:
     
     try:
         config = utils.get_site_config_file()
-        # Create list of all sites
-        sites = list(config['site'].keys())
+        # Create list of all sites, using the site_config.yml file
+        sites = list(config[constants.FileConfig.SITE.value].keys())
 
         file_configs: list[dict] = []
 
         # Iterate over each site
         for site in sites:
             # Get a list of files from an individual site
-            # get_file_list() also creates artifact buckets for the pipeline
+            # get_file_list() also creates artifact buckets for the pipeline for a given site
             files = processing.get_file_list(site)
 
             for file in files:
@@ -72,12 +73,12 @@ def get_files() -> list[dict]:
 
 @task(max_active_tis_per_dag=10)
 def convert_to_parquet(file_config: dict) -> None:
-    processing.convert_to_parquet(f"{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']}")
+    processing.convert_to_parquet(f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}")
 
 @task(max_active_tis_per_dag=10)
 def dummy_testing_task(file_config: dict) -> None:
-    utils.logger.info(f"Going to validate schema of gs://{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']} against OMOP v{file_config['omop_version']}")
-    utils.logger.info(f"Will write to BQ dataset {file_config['project_id']}.{file_config['bq_table']}")
+    utils.logger.info(f"Going to validate schema of gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]} against OMOP v{file_config[constants.FileConfig.OMOP_VERSION.value]}")
+    utils.logger.info(f"Will write to BQ dataset {file_config[constants.FileConfig.PROJECT_ID.value]}.{file_config[constants.FileConfig.BQ_DATASET.value]}")
 
 
 

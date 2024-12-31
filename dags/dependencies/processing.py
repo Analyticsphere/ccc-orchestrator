@@ -12,7 +12,7 @@ def get_file_list(site: str) -> list[str]:
     Get a list of files from a site's latest delivery
     """
     try:
-        gcs_bucket = utils.get_site_config_file()['site'][site]['gcs_path']
+        gcs_bucket = utils.get_site_bucket(site)
         delivery_date = get_most_recent_folder(site)
 
         full_path = f"{gcs_bucket}/{delivery_date}"
@@ -27,9 +27,9 @@ def get_file_list(site: str) -> list[str]:
         )
         response.raise_for_status()
 
+        # File list will have strings like YYYY-MM-DD/file_name.extension
+        # Using date part of file path for downstream use
         filenames = response.json()['file_list']
-        # Leave date prefix in names so that they can be used downstream of this function
-        #filenames = [utils.remove_date_prefix(f) for f in filenames]
 
         return filenames
         
@@ -45,7 +45,7 @@ def get_most_recent_folder(site: str) -> str:
     """
     Find the most recent date-formatted folder in a GCS bucket.
     """
-    gcs_bucket = utils.get_site_config_file()['site'][site]['gcs_path']
+    gcs_bucket = utils.get_site_bucket(site)
 
     storage_client = storage.Client()
     bucket = storage_client.get_bucket(gcs_bucket)

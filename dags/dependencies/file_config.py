@@ -1,25 +1,26 @@
 from . import utils
+from . import constants
 
 class FileConfig:
     def __init__(self, site: str, file_name: str):
         self.site = site
-        self.site_config = utils.get_site_config_file()['site'][site]
+        self.site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
         self.file_name = utils.remove_date_prefix(file_name)
         self.delivery_date = utils.get_date_prefix(file_name)
-        self.project_id = self.site_config['project_id']
-        self.gcs_path = self.site_config['gcs_path']
-        self.bq_table = self.site_config['bq_omop_table']
-        self.omop_version = self.site_config['omop_version']
+        self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
+        self.gcs_path = self.site_config[constants.FileConfig.GCS_PATH.value]
+        self.bq_table = self.site_config[constants.FileConfig.BQ_DATASET.value]
+        self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
 
     def to_dict(self):
         return {
-            'site': self.site,
-            'file_name': self.file_name,
-            'delivery_date': self.delivery_date,
-            'project_id': self.project_id,
-            'gcs_path': self.gcs_path,
-            'bq_table': self.bq_table,
-            'omop_version': self.omop_version
+            constants.FileConfig.SITE.value: self.site,
+            constants.FileConfig.FILE_NAME.value: self.file_name,
+            constants.FileConfig.DELIVERY_DATE.value: self.delivery_date,
+            constants.FileConfig.PROJECT_ID.value: self.project_id,
+            constants.FileConfig.GCS_PATH.value: self.gcs_path,
+            constants.FileConfig.BQ_DATASET.value: self.bq_table,
+            constants.FileConfig.OMOP_VERSION.value: self.omop_version
         }
 
     def __repr__(self):
