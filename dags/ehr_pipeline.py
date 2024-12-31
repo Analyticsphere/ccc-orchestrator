@@ -9,6 +9,7 @@ import dependencies.processing as processing
 import dependencies.file_config as file_config
 import sys
 
+
 default_args = {
     'start_date': airflow.utils.dates.days_ago(0),
     'retries': 1,
@@ -43,17 +44,23 @@ def check_api_health() -> None:
 
 @task(task_id='get_file_list')
 def get_files() -> list[dict]:
-    utils.logger.info("Executing get_files() task")
+    utils.logger.info("Getting list of files to process")
     
     try:
         config = utils.get_site_config_file()
+        # Create list of all sites
         sites = list(config['site'].keys())
 
         file_configs: list[dict] = []
 
+        # Iterate over each site
         for site in sites:
+            # Get a list of files from an individual site
+            # get_file_list() also creates artifact buckets for the pipeline
             files = processing.get_file_list(site)
+
             for file in files:
+                # Create file configuration dictionaries for each file from a site
                 file_config_obj = file_config.FileConfig(site, file)
                 file_configs.append(file_config_obj.to_dict())
         
@@ -64,18 +71,22 @@ def get_files() -> list[dict]:
         sys.exit(1)
 
 @task(max_active_tis_per_dag=10)
-def print_file_info(file_config: dict) -> None:
-    utils.logger.info(f"The file info is {file_config}")
+def convert_to_parquet(file_config: dict) -> None:
+    utils.logger.info(f"Going to convert file gs://{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']} to Parquet")
+    processing.convert_to_parquet(f"{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']}")
 
 @task(max_active_tis_per_dag=10)
 def dummy_testing_task(file_config: dict) -> None:
     utils.logger.info(f"Going to validate schema of gs://{file_config['gcs_path']}/{file_config['delivery_date']}/{file_config['file_name']} against OMOP v{file_config['omop_version']}")
     utils.logger.info(f"Will write to BQ dataset {file_config['project_id']}.{file_config['bq_table']}")
 
+
+
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
-    print_info = print_file_info.expand(file_config=file_list)
-    dummy_info = dummy_testing_task.expand(file_config=file_list)
+    convert_files = convert_to_parquet.expand(file_config=file_list)
+    #dummy_info = dummy_testing_task.expand(file_config=file_list)
 
-api_health_check >> file_list >> print_info >> dummy_info
+#api_health_check >> file_list >> dummy_info
+api_health_check >> file_list >> convert_files

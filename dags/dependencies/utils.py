@@ -6,7 +6,7 @@ import sys
 import yaml
 
 """
-Set up a logging instance that will write to stdout (and therefor show up in Google Cloud logs)
+Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
 """
 logging.basicConfig(
     level=logging.INFO,
@@ -30,8 +30,15 @@ def get_gcloud_token() -> str:
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to get gcloud token: {e}")
         sys.exit(1)
-    
-def check_service_health(base_url):
+
+def get_auth_header() -> str:
+    """
+    Set up headers with bearer token
+    """
+    headers = {'Authorization': f'Bearer {get_gcloud_token()}'}
+    return headers
+
+def check_service_health(base_url: str) -> dict:
     """
     Call the heartbeat endpoint to check service health.
     """
@@ -40,15 +47,10 @@ def check_service_health(base_url):
         # Get the token
         token = get_gcloud_token()
         
-        # Set up headers with bearer token
-        headers = {
-            'Authorization': f'Bearer {token}'
-        }
-        
         # Make the authenticated request
         response = requests.get(
             f"{base_url}/heartbeat",
-            headers=headers
+            headers=get_auth_header()
         )
         response.raise_for_status()
         return response.json()

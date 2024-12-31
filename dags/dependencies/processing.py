@@ -7,7 +7,6 @@ import subprocess
 from google.cloud import storage
 from datetime import datetime
 
-
 def get_file_list(site: str) -> list[str]:
     """
     Get a list of files from a site's latest delivery
@@ -16,20 +15,19 @@ def get_file_list(site: str) -> list[str]:
         gcs_bucket = utils.get_site_config_file()['site'][site]['gcs_path']
         delivery_date = get_most_recent_folder(site)
 
+        full_path = f"{gcs_bucket}/{delivery_date}"
+        create_artifact_buckets(full_path)
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
-        
-        # Set up headers with bearer token
-        headers = {'Authorization': f'Bearer {utils.get_gcloud_token()}'}
 
         # Make the authenticated request
         response = requests.get(
             f"{constants.PROCESSOR_ENDPOINT}/get_file_list?bucket={gcs_bucket}&folder={delivery_date}",
-            headers=headers
+            headers=utils.get_auth_header()
         )
         response.raise_for_status()
 
         filenames = response.json()['file_list']
-        # Leave date prefix in names so that it can be used downstream of this function
+        # Leave date prefix in names so that they can be used downstream of this function
         #filenames = [utils.remove_date_prefix(f) for f in filenames]
 
         return filenames
@@ -81,3 +79,19 @@ def get_most_recent_folder(site: str) -> str:
             continue
 
     return most_recent_folder
+
+def create_artifact_buckets(parent_bucket: str) -> None:
+    utils.logger.info(f"Creating artifact bucket in {parent_bucket}")
+    reponse = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/create_artifact_buckets?parent_bucket={parent_bucket}",
+        headers=utils.get_auth_header()
+    )
+    reponse.raise_for_status()
+
+def convert_to_parquet(file_path: str) -> None:
+    utils.logger.info(f"Converting {file_path} to Parquet")
+    response = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/convert_to_parquet?file_path={file_path}",
+        headers=utils.get_auth_header()
+    )
+    response.raise_for_status()
