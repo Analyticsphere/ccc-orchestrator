@@ -17,6 +17,7 @@ def get_file_list(site: str) -> list[str]:
 
         full_path = f"{gcs_bucket}/{delivery_date}"
         create_artifact_buckets(full_path)
+
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
 
         # Make the authenticated request
@@ -89,7 +90,7 @@ def create_artifact_buckets(parent_bucket: str) -> None:
     reponse.raise_for_status()
 
 def convert_to_parquet(file_path: str) -> None:
-    utils.logger.info(f"Converting {file_path} to Parquet")
+    utils.logger.info(f"Converting file gs://{file_path} to Parquet")
     response = requests.get(
         f"{constants.PROCESSOR_ENDPOINT}/convert_to_parquet?file_path={file_path}",
         headers=utils.get_auth_header()
