@@ -1,7 +1,17 @@
 site:
-  'synthea':
+  'synthea_53':
     display_name: 'Synthea Synthetic Data'
-    project_id: 'nih-nci-dceg-connect-dev'
-    gcs_path: 'gs://synthea_datasets/synthea_100_omop_53/'
-    bq_omop_table: 'synthea_cdm53'
+    gcs_path: 'synthea_cdm53'
     file_delivery_format: '.csv'
+    project_id: 'nih-nci-dceg-connect-dev'
+    bq_dataset: 'synthea_cdm53'
+    omop_version: '5.3'
+    post_processing: ['cdm_upgrade', 'henry_ford_fix']
+  'synthea_54':
+    display_name: 'Synthea Synthetic Data'
+    gcs_path: 'synthea_cdm54'
+    file_delivery_format: '.csv'
+    project_id: 'nih-nci-dceg-connect-dev'
+    bq_dataset: 'synthea_cdm54'
+    omop_version: '5.4'
+    post_processing: ['cdm_upgrade']
