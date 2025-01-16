@@ -77,9 +77,12 @@ def convert_to_parquet(file_config: dict) -> None:
 
 @task(max_active_tis_per_dag=10)
 def validate_file(file_config: dict) -> None:
-    gcs_file_path = f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
-    omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
-    validation.validate_file(file_path=gcs_file_path, omop_version=omop_version)
+    validation.validate_file(
+        file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
+        omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
+        gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
+        delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
+        )
 
 @task(max_active_tis_per_dag=10)
 def dummy_testing_task(file_config: dict) -> None:
