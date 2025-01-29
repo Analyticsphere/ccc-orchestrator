@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 import dependencies.utils as utils
 import dependencies.constants as constants
 import dependencies.processing as processing
+import dependencies.validation as validation
 import dependencies.file_config as file_config
 import sys
-
 
 
 default_args = {
@@ -41,7 +41,6 @@ def check_api_health() -> None:
     except Exception as e:
         utils.logger.error(f"API health check failed: {str(e)}")
         sys.exit(1)
-
 
 @task(task_id='get_file_list')
 def get_files() -> list[dict]:
@@ -78,6 +77,15 @@ def process_incoming_file(file_config: dict) -> None:
 
     processing.process_file(file_type, gcs_file_path)
 
+@task(max_active_tis_per_dag=10)
+def validate_file(file_config: dict) -> None:
+    validation.validate_file(
+        file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
+        omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
+        gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
+        delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
+        )
+
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def fix_parquet(file_config: dict) -> None:
     file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
@@ -88,11 +96,16 @@ def fix_parquet(file_config: dict) -> None:
     utils.logger.info(f"Fixing Parquet file gs://{file_path}")
     processing.fix_parquet_file(file_path, omop_version)
 
+# @task(max_active_tis_per_dag=10)
+# def dummy_testing_task(file_config: dict) -> None:
+#     utils.logger.info(f"Going to validate schema of gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]} against OMOP v{file_config[constants.FileConfig.OMOP_VERSION.value]}")
+#     utils.logger.info(f"Will write to BQ dataset {file_config[constants.FileConfig.PROJECT_ID.value]}.{file_config[constants.FileConfig.BQ_DATASET.value]}")
+
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
     process_files = process_incoming_file.expand(file_config=file_list)
+    validate_files = validate_file.expand(file_config=file_list)
     fix_file = fix_parquet.expand(file_config=file_list)
 
-api_health_check >> file_list >> process_files >> fix_file
-#api_health_check >> file_list >> fix_file
+api_health_check >> file_list >> process_files >> validate_files >> fix_file
