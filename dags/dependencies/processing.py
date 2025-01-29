@@ -89,10 +89,19 @@ def create_artifact_buckets(parent_bucket: str) -> None:
     )
     reponse.raise_for_status()
 
-def convert_to_parquet(file_path: str) -> None:
-    utils.logger.info(f"Converting file gs://{file_path} to Parquet")
+def process_file(file_type: str, file_path: str) -> None:
+    utils.logger.info(f"Processing incoming {file_type} file gs://{file_path}")
     response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/convert_to_parquet?file_path={file_path}",
+        f"{constants.PROCESSOR_ENDPOINT}/convert_to_parquet?file_type={file_type}&file_path={file_path}",
+        headers=utils.get_auth_header(),
+        timeout=(10, 600)
+    )
+    response.raise_for_status()
+
+def fix_parquet_file(file_path: str, cdm_version: str) -> None:
+    utils.logger.info(f"Fixing Parquet file gs://{file_path}")
+    response = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/fix_parquet?file_path={file_path}&omop_version={cdm_version}",
         headers=utils.get_auth_header()
     )
     response.raise_for_status()

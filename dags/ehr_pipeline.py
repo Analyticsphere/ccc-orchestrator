@@ -71,22 +71,28 @@ def get_files() -> list[dict]:
         utils.logger.error(f"Unable to get file list: {str(e)}")
         sys.exit(1)
 
-@task(max_active_tis_per_dag=10)
-def convert_to_parquet(file_config: dict) -> None:
-    processing.convert_to_parquet(f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}")
+@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+def process_incoming_file(file_config: dict) -> None:
+    file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
+    gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
 
-@task(max_active_tis_per_dag=10)
-def dummy_testing_task(file_config: dict) -> None:
-    utils.logger.info(f"Going to validate schema of gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]} against OMOP v{file_config[constants.FileConfig.OMOP_VERSION.value]}")
-    utils.logger.info(f"Will write to BQ dataset {file_config[constants.FileConfig.PROJECT_ID.value]}.{file_config[constants.FileConfig.BQ_DATASET.value]}")
+    processing.process_file(file_type, gcs_file_path)
 
+@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+def fix_parquet(file_config: dict) -> None:
+    file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
+    file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
 
+    omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+
+    utils.logger.info(f"Fixing Parquet file gs://{file_path}")
+    processing.fix_parquet_file(file_path, omop_version)
 
 with dag:
     api_health_check = check_api_health()
     file_list = get_files()
-    convert_files = convert_to_parquet.expand(file_config=file_list)
-    #dummy_info = dummy_testing_task.expand(file_config=file_list)
+    process_files = process_incoming_file.expand(file_config=file_list)
+    fix_file = fix_parquet.expand(file_config=file_list)
 
-#api_health_check >> file_list >> dummy_info
-api_health_check >> file_list >> convert_files
+api_health_check >> file_list >> process_files >> fix_file
+#api_health_check >> file_list >> fix_file
