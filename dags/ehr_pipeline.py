@@ -77,7 +77,7 @@ def process_incoming_file(file_config: dict) -> None:
 
     processing.process_file(file_type, gcs_file_path)
 
-@task(max_active_tis_per_dag=10)
+@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
     validation.validate_file(
         file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
