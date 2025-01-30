@@ -1,7 +1,12 @@
 from enum import Enum
 
+# Main endpoint
 PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-1061430463455.us-central1.run.app"
+
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/config/site_config.yml"
+
+CSV = ".csv"
+PARQUET = ".parquet"
 
 class FileConfig(str, Enum):
     DISPLAY_NAME = "display_name"
@@ -13,3 +18,12 @@ class FileConfig(str, Enum):
     SITE = "site"
     DELIVERY_DATE = "delivery_date"
     FILE_NAME = "file_name"
+
+class ArtifactPaths(str, Enum):
+    ARTIFACTS = "artifacts/"
+    FIXED_FILES = f"{ARTIFACTS}fixed_files/"
+    CONVERTED_FILES = f"{ARTIFACTS}converted_files/"
+    REPORT = f"{ARTIFACTS}delivery_report/"
+    REPORT_TMP = f"{ARTIFACTS}delivery_report/tmp/"
+    DQD = f"{ARTIFACTS}dqd/"
+    INVALID_ROWS = f"{ARTIFACTS}invalid_rows/"

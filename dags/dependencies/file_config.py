@@ -9,6 +9,7 @@ class FileConfig:
         self.delivery_date = utils.get_date_prefix(file_name)
         self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
         self.gcs_path = self.site_config[constants.FileConfig.GCS_PATH.value]
+        self.file_delivery_format = self.site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]
         self.bq_table = self.site_config[constants.FileConfig.BQ_DATASET.value]
         self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
 
@@ -17,6 +18,7 @@ class FileConfig:
             constants.FileConfig.SITE.value: self.site,
             constants.FileConfig.FILE_NAME.value: self.file_name,
             constants.FileConfig.DELIVERY_DATE.value: self.delivery_date,
+            constants.FileConfig.FILE_DELIVERY_FORMAT.value: self.file_delivery_format,
             constants.FileConfig.PROJECT_ID.value: self.project_id,
             constants.FileConfig.GCS_PATH.value: self.gcs_path,
             constants.FileConfig.BQ_DATASET.value: self.bq_table,
