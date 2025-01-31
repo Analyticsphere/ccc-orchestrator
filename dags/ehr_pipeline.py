@@ -55,6 +55,7 @@ def get_files() -> list[dict]:
         file_configs: list[dict] = []
 
         # Iterate over each site
+        # TODO: Only for sites that need to be processed...
         for site in sites:
             # Get a list of files from the latest delivery of individual site
             # get_file_list() also creates artifact buckets for the pipeline for a given site delivery
@@ -117,7 +118,6 @@ def prepare_bq() -> None:
     utils.logger.warning(f"site_config is {site_config}")
 
     # TODO: Only for sites that need to be processed...
-    # Get the entier file config dict, without expanding, and use that to get sites???
     for site in sites:
         project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
