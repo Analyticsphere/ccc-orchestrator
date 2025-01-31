@@ -82,6 +82,15 @@ def get_site_config_file() -> dict:
         logger.error(f"Unable to get site configuration file: {e}")
         sys.exit(1)
 
+def get_site_list() -> list[str]:
+    """
+    Create list of all sites, using the site_config.yml file
+    """
+    config = get_site_config_file()
+    sites = list(config[constants.FileConfig.SITE.value].keys()) 
+
+    return sites
+
 def remove_date_prefix(file_name: str) -> str:
     """
     Removes date prefix from files pulled from EHR OMOP GCS buckets in format YYYY-MM-DD/file_name.csv

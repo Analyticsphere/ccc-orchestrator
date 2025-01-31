@@ -7,6 +7,7 @@ import dependencies.utils as utils
 import dependencies.constants as constants
 import dependencies.processing as processing
 import dependencies.validation as validation
+import dependencies.bq as bq
 import dependencies.file_config as file_config
 import sys
 
@@ -25,7 +26,7 @@ dag = DAG(
     start_date=days_ago(1)
 )
 
-@task(task_id='check_api_health')
+@task()
 def check_api_health() -> None:
     """
     Task to verify EHR processing container is up
@@ -44,19 +45,19 @@ def check_api_health() -> None:
 
 @task(task_id='get_file_list')
 def get_files() -> list[dict]:
+    """
+    Obtains list of EHR data files that need to be processed
+    """
     utils.logger.info("Getting list of files to process")
     
-    try:
-        config = utils.get_site_config_file()
-        # Create list of all sites, using the site_config.yml file
-        sites = list(config[constants.FileConfig.SITE.value].keys())
-
+    try:        
+        sites = utils.get_site_list()
         file_configs: list[dict] = []
 
         # Iterate over each site
         for site in sites:
-            # Get a list of files from an individual site
-            # get_file_list() also creates artifact buckets for the pipeline for a given site
+            # Get a list of files from the latest delivery of individual site
+            # get_file_list() also creates artifact buckets for the pipeline for a given site delivery
             files = processing.get_file_list(site)
 
             for file in files:
@@ -72,6 +73,9 @@ def get_files() -> list[dict]:
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def process_incoming_file(file_config: dict) -> None:
+    """
+    Create optimized version of incoming EHR data file
+    """
     file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
     gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
 
@@ -79,6 +83,9 @@ def process_incoming_file(file_config: dict) -> None:
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
+    """
+    Validate file against OMOP CDM specificiations
+    """
     validation.validate_file(
         file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
         omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
@@ -87,7 +94,10 @@ def validate_file(file_config: dict) -> None:
         )
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
-def fix_parquet(file_config: dict) -> None:
+def fix_file(file_config: dict) -> None:
+    """
+    Standardize OMOP data file structure
+    """
     file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
     file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
 
@@ -95,6 +105,36 @@ def fix_parquet(file_config: dict) -> None:
 
     utils.logger.info(f"Fixing Parquet file gs://{file_path}")
     processing.fix_parquet_file(file_path, omop_version)
+
+@task
+def prepare_bq() -> None:
+    """
+    Deletes files and tables from previous pipeline runs
+    """
+    site_config = utils.get_site_config_file()
+    sites = utils.get_site_list()
+
+    utils.logger.warning(f"site_config is {site_config}")
+
+    # TODO: Only for sites that need to be processed...
+    # Get the entier file config dict, without expanding, and use that to get sites???
+    for site in sites:
+        project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+
+        # Delete all tables within BigQuery dataset
+        bq.prep_dataset(project_id, dataset_id)
+
+@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+def load_to_bq(file_config: dict) -> None:
+    """
+    Load OMOP data file to BigQuery table
+    """
+    gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
+    project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
+    dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
+
+    bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
 
 # @task(max_active_tis_per_dag=10)
 # def dummy_testing_task(file_config: dict) -> None:
@@ -106,6 +146,8 @@ with dag:
     file_list = get_files()
     process_files = process_incoming_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
-    fix_file = fix_parquet.expand(file_config=file_list)
+    fix_data_file = fix_file.expand(file_config=file_list)
+    clean_bq = prepare_bq()
+    load_file = load_to_bq.expand(file_config=file_list)
 
-api_health_check >> file_list >> process_files >> validate_files >> fix_file
+api_health_check >> file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file
