@@ -25,8 +25,5 @@ class FileConfig:
             constants.FileConfig.OMOP_VERSION.value: self.omop_version
         }
 
-    def get_project_id(self):
-        return self.project_id
-
     def __repr__(self):
         return str(self.to_dict())
