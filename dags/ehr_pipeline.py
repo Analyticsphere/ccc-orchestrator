@@ -10,6 +10,7 @@ import dependencies.validation as validation
 import dependencies.bq as bq
 import dependencies.file_config as file_config
 import sys
+from typing import List, Tuple
 
 
 default_args = {
@@ -43,34 +44,58 @@ def check_api_health() -> None:
         utils.logger.error(f"API health check failed: {str(e)}")
         sys.exit(1)
 
-@task(task_id='get_file_list')
-def get_files() -> list[dict]:
+@task()
+def get_unprocessed_sites() -> List[Tuple[str, str]]:
+    unprocessed_sites: List[Tuple[str, str]] = []
+    sites = utils.get_site_list()
+
+    for site in sites:
+        date_to_check = utils.get_most_recent_folder(site)
+        log_entries = bq.get_bq_log_row(site, date_to_check)
+
+        # If no log entry exists or the status is not complete, mark as unprocessed.
+        if not log_entries or log_entries[0]['status'] != constants.PIPELINE_END_STRING:
+            unprocessed_sites.append((site, date_to_check))
+
+    return unprocessed_sites
+
+@task.short_circuit
+def check_sites_exist(unprocessed_sites: List[Tuple[str, str]]) -> bool:
+    """
+    Returns False (which skips downstream tasks) if there are no unprocessed sites.
+    """
+    if not unprocessed_sites:
+        utils.logger.info("No unprocessed sites found. Skipping processing tasks.")
+        return False
+    return True
+
+@task()
+def get_files(sites_to_process: List[Tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed
     """
     utils.logger.info("Getting list of files to process")
     
-    try:        
-        sites = utils.get_site_list()
-        file_configs: list[dict] = []
+    # Store list of files from unprocessed deliveries
+    file_configs: list[dict] = []
+    
+    try:
+        for site_to_process in sites_to_process:
+            site, delivery_date = site_to_process
 
-        # Iterate over each site
-        # TODO: Only for sites that need to be processed...
-        for site in sites:
-            # Get a list of files from the latest delivery of individual site
             # get_file_list() also creates artifact buckets for the pipeline for a given site delivery
-            files = processing.get_file_list(site)
+            files = processing.get_file_list(site, delivery_date)
 
             for file in files:
                 # Create file configuration dictionaries for each file from a site
                 file_config_obj = file_config.FileConfig(site, file)
                 file_configs.append(file_config_obj.to_dict())
-        
-        return file_configs
-    
     except Exception as e:
         utils.logger.error(f"Unable to get file list: {str(e)}")
         sys.exit(1)
+
+    return file_configs
+
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def process_incoming_file(file_config: dict) -> None:
@@ -143,11 +168,17 @@ def load_to_bq(file_config: dict) -> None:
 
 with dag:
     api_health_check = check_api_health()
-    file_list = get_files()
+    unprocessed_sites = get_unprocessed_sites()
+    # This task will short-circuit (skip downstream tasks) if no sites are returned.
+    sites_exist = check_sites_exist(unprocessed_sites)
+    
+    file_list = get_files(sites_to_process=unprocessed_sites)
     process_files = process_incoming_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
     fix_data_file = fix_file.expand(file_config=file_list)
     clean_bq = prepare_bq()
     load_file = load_to_bq.expand(file_config=file_list)
-
-api_health_check >> file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file
+    
+    # Define dependencies
+    api_health_check >> unprocessed_sites >> sites_exist >> file_list
+    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file

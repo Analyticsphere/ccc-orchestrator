@@ -7,13 +7,12 @@ import subprocess
 from google.cloud import storage
 from datetime import datetime
 
-def get_file_list(site: str) -> list[str]:
+def get_file_list(site: str, delivery_date: str) -> list[str]:
     """
     Get a list of files from a site's latest delivery
     """
     try:
         gcs_bucket = utils.get_site_bucket(site)
-        delivery_date = get_most_recent_folder(site)
 
         full_path = f"{gcs_bucket}/{delivery_date}"
         create_artifact_buckets(full_path)
@@ -41,45 +40,7 @@ def get_file_list(site: str) -> list[str]:
         sys.exit(1)
     return []
 
-def get_most_recent_folder(site: str) -> str:
-    """
-    Find the most recent date-formatted folder in a GCS bucket.
-    """
-    gcs_bucket = utils.get_site_bucket(site)
 
-    storage_client = storage.Client()
-    bucket = storage_client.get_bucket(gcs_bucket)
-
-    # Get all blobs
-    blobs = list(bucket.list_blobs())
-    
-    # Extract unique top-level folder names
-    top_level_folders = set()
-    for blob in blobs:
-        # Split the path and take the first segment
-        parts = blob.name.split('/')
-        if parts and parts[0]:  # Make sure we have a non-empty first segment
-            top_level_folders.add(parts[0])
-    
-    most_recent_date = None
-    most_recent_folder = None
-    
-    # Check each folder
-    for folder_name in top_level_folders:
-        try:
-            # Try to parse the folder name as a date
-            folder_date = datetime.strptime(folder_name, '%Y-%m-%d')
-            
-            # Update most recent if this is the first or a more recent date
-            if most_recent_date is None or folder_date > most_recent_date:
-                most_recent_date = folder_date
-                most_recent_folder = folder_name
-                
-        except ValueError:
-            # Skip folders that don't match our date format
-            continue
-
-    return most_recent_folder
 
 def create_artifact_buckets(parent_bucket: str) -> None:
     utils.logger.info(f"Creating artifact bucket in {parent_bucket}")
