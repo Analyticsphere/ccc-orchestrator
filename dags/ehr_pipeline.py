@@ -52,13 +52,13 @@ def get_unprocessed_sites() -> List[Tuple[str, str]]:
     sites = utils.get_site_list()
 
     for site in sites:
-        date_to_check = utils.get_most_recent_folder(site)
-        site_log_entries = bq.get_bq_log_row(site, date_to_check)
+        delivery_date_to_check = utils.get_most_recent_folder(site)
+        site_log_entries = bq.get_bq_log_row(site, delivery_date_to_check)
 
         # If no log entry exists or the status is not error, mark as unprocessed.
         # If status is completed or running, we should not mark as unprocessed
         if not site_log_entries or site_log_entries[0]['status'] == constants.PIPELINE_ERROR_STRING:
-            unprocessed_sites.append((site, date_to_check))
+            unprocessed_sites.append((site, delivery_date_to_check))
 
     return unprocessed_sites
 
