@@ -1,9 +1,8 @@
 from . import utils
 from . import constants
-import requests
-from google.cloud import storage, bigquery
-from google.cloud.exceptions import NotFound
-from datetime import datetime
+import requests # type: ignore
+from google.cloud import bigquery # type: ignore
+from google.cloud.exceptions import NotFound # type: ignore
 import sys
 
 def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str) -> None:

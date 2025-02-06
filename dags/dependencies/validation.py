@@ -1,7 +1,7 @@
 from . import utils
 from . import constants
-import requests
-
+import requests # type: ignore
+ 
 def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_path: str) -> None:
     utils.logger.info(f"Validating schema of {file_path} against OMOP v{omop_version}")
     response = requests.get(

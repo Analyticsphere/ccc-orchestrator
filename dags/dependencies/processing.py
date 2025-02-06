@@ -2,10 +2,8 @@ from . import utils
 from . import constants
 import logging
 import sys
-import requests
+import requests # type: ignore
 import subprocess
-from google.cloud import storage
-from datetime import datetime
 
 def get_file_list(site: str, delivery_date: str) -> list[str]:
     """

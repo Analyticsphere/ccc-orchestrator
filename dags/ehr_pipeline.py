@@ -1,10 +1,10 @@
-import airflow
-from airflow import DAG
-from airflow.utils.dates import days_ago
-from airflow.decorators import task, task_group
-from airflow.operators.python import get_current_context
+import airflow # type: ignore
+from airflow import DAG # type: ignore
+from airflow.utils.dates import days_ago # type: ignore
+from airflow.decorators import task # type: ignore
+from airflow.operators.python import get_current_context # type: ignore
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 import dependencies.utils as utils
 import dependencies.constants as constants
 import dependencies.processing as processing
@@ -12,8 +12,6 @@ import dependencies.validation as validation
 import dependencies.bq as bq
 import dependencies.file_config as file_config
 import sys
-from typing import List, Tuple
-
 
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),
@@ -47,8 +45,8 @@ def check_api_health() -> None:
         sys.exit(1)
 
 @task()
-def get_unprocessed_sites() -> List[Tuple[str, str]]:
-    unprocessed_sites: List[Tuple[str, str]] = []
+def get_unprocessed_sites() -> list[tuple[str, str]]:
+    unprocessed_sites: list[tuple[str, str]] = []
     sites = utils.get_site_list()
 
     for site in sites:
@@ -63,7 +61,7 @@ def get_unprocessed_sites() -> List[Tuple[str, str]]:
     return unprocessed_sites
 
 @task.short_circuit
-def check_for_unprocessed(unprocessed_sites: List[Tuple[str, str]]) -> bool:
+def check_for_unprocessed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     """
     Returns False (which skips downstream tasks) if there are no unprocessed sites.
     """
@@ -73,7 +71,7 @@ def check_for_unprocessed(unprocessed_sites: List[Tuple[str, str]]) -> bool:
     return True
 
 @task()
-def get_files(sites_to_process: List[Tuple[str, str]]) -> list[dict]:
+def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed
     """
@@ -109,7 +107,7 @@ def get_files(sites_to_process: List[Tuple[str, str]]) -> list[dict]:
                 file_configs.append(file_config_obj.to_dict())
         except Exception as e:
             utils.logger.error(f"Unable to get file list: {str(e)}")
-            bq.bq_log_error(site, delivery_date, e)
+            bq.bq_log_error(site, delivery_date, str(e))
             sys.exit(1)
 
     return file_configs
@@ -131,7 +129,7 @@ def process_incoming_file(file_config: dict) -> None:
         processing.process_file(file_type, gcs_file_path)
     except Exception as e:
         utils.logger.error(f"Unable to processing incoming file: {e}")
-        bq.bq_log_error(site, delivery_date, e)
+        bq.bq_log_error(site, delivery_date, str(e))
         sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -152,7 +150,7 @@ def validate_file(file_config: dict) -> None:
             )
     except Exception as e:
         utils.logger.error(f"Unable to validate file: {e}")
-        bq.bq_log_error(site, delivery_date, e)
+        bq.bq_log_error(site, delivery_date, str(e))
         sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -174,11 +172,11 @@ def fix_file(file_config: dict) -> None:
         processing.fix_parquet_file(file_path, omop_version)
     except Exception as e:
         utils.logger.error(f"Unable to fix file: {e}")
-        bq.bq_log_error(site, delivery_date, e)
+        bq.bq_log_error(site, delivery_date, str(e))
         sys.exit(1)
 
 @task
-def prepare_bq(sites_to_process: List[Tuple[str, str]]) -> None:
+def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
     """
     Deletes files and tables from previous pipeline runs
     """    
@@ -196,7 +194,7 @@ def prepare_bq(sites_to_process: List[Tuple[str, str]]) -> None:
             bq.prep_dataset(project_id, dataset_id)
         except Exception as e:
             utils.logger.error(f"Unable to prepare BigQuery: {e}")
-            bq.bq_log_error(site, delivery_date, e)
+            bq.bq_log_error(site, delivery_date, str(e))
             sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -214,11 +212,11 @@ def load_to_bq(file_config: dict) -> None:
         bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
     except Exception as e:
         utils.logger.error(f"Unable to write to BigQuery: {e}")
-        bq.bq_log_error(site, delivery_date, e)
+        bq.bq_log_error(site, delivery_date, str(e))
         sys.exit(1)
 
 @task
-def final_cleanup(sites_to_process: List[Tuple[str, str]]) -> None:
+def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site

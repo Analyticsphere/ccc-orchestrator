@@ -1,11 +1,12 @@
 from . import constants
-import requests
+import requests # type: ignore
 import subprocess
 import logging
 import sys
-import yaml
+import yaml # type: ignore
 from datetime import datetime
-from google.cloud import storage
+from google.cloud import storage # type: ignore
+from typing import Optional
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
@@ -33,7 +34,7 @@ def get_gcloud_token() -> str:
         logger.error(f"Failed to get gcloud token: {e}")
         sys.exit(1)
 
-def get_auth_header() -> str:
+def get_auth_header() -> dict[str, str]:
     """
     Set up headers with bearer token
     """
