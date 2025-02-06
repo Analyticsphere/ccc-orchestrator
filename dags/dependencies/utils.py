@@ -145,11 +145,38 @@ def get_most_recent_folder(site: str) -> str:
 
     return most_recent_folder
 
+def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: str) -> None:
+    status = constants.PIPELINE_START_STRING
 
-def create_artifact_buckets(parent_bucket: str) -> None:
-    utils.logger.info(f"Creating artifact bucket in {parent_bucket}")
     reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/create_artifact_buckets?parent_bucket={parent_bucket}",
-        headers=utils.get_auth_header()
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&file_type={file_type}&omop_version={omop_version}",
+        headers=get_auth_header()
+    )
+    reponse.raise_for_status()
+
+def bq_log_running(site: str, delivery_date: str) -> None:
+    status = constants.PIPELINE_RUNNING_STRING
+
+    reponse = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
+        headers=get_auth_header()
+    )
+    reponse.raise_for_status()
+
+def bq_log_error(site: str, delivery_date: str) -> None:
+    status = constants.PIPELINE_ERROR_STRING
+
+    reponse = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
+        headers=get_auth_header()
+    )
+    reponse.raise_for_status()
+
+def bq_log_complete(site: str, delivery_date: str) -> None:
+    status = constants.PIPELINE_COMPLETE_STRING
+
+    reponse = requests.get(
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
+        headers=get_auth_header()
     )
     reponse.raise_for_status()

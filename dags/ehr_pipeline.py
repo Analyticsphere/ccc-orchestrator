@@ -53,14 +53,15 @@ def get_unprocessed_sites() -> List[Tuple[str, str]]:
         date_to_check = utils.get_most_recent_folder(site)
         log_entries = bq.get_bq_log_row(site, date_to_check)
 
-        # If no log entry exists or the status is not complete, mark as unprocessed.
-        if not log_entries or log_entries[0]['status'] != constants.PIPELINE_END_STRING:
+        # If no log entry exists or the status is not error, mark as unprocessed.
+        # If status is completed or running, we should not mark as unprocessed
+        if not log_entries or log_entries[0]['status'] == constants.PIPELINE_ERROR_STRING:
             unprocessed_sites.append((site, date_to_check))
 
     return unprocessed_sites
 
 @task.short_circuit
-def check_sites_exist(unprocessed_sites: List[Tuple[str, str]]) -> bool:
+def check_for_unprocessed(unprocessed_sites: List[Tuple[str, str]]) -> bool:
     """
     Returns False (which skips downstream tasks) if there are no unprocessed sites.
     """
@@ -83,6 +84,15 @@ def get_files(sites_to_process: List[Tuple[str, str]]) -> list[dict]:
         for site_to_process in sites_to_process:
             site, delivery_date = site_to_process
 
+            site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
+
+            utils.bq_log_start(
+                site,
+                delivery_date,
+                site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value],
+                site_config[constants.FileConfig.OMOP_VERSION.value]
+            )
+
             # get_file_list() also creates artifact buckets for the pipeline for a given site delivery
             files = processing.get_file_list(site, delivery_date)
 
@@ -92,6 +102,7 @@ def get_files(sites_to_process: List[Tuple[str, str]]) -> list[dict]:
                 file_configs.append(file_config_obj.to_dict())
     except Exception as e:
         utils.logger.error(f"Unable to get file list: {str(e)}")
+        # TODO: Set record in BQ table to error if failed
         sys.exit(1)
 
     return file_configs
@@ -102,6 +113,7 @@ def process_incoming_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file
     """
+    # TODO: If failed, update BQ log entry
     file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
     gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
 
@@ -112,6 +124,7 @@ def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specificiations
     """
+    # TODO: If failed, update BQ log entry
     validation.validate_file(
         file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
         omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
@@ -124,6 +137,7 @@ def fix_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure
     """
+    # TODO: If failed, update BQ log entry
     file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
     file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
 
@@ -133,17 +147,17 @@ def fix_file(file_config: dict) -> None:
     processing.fix_parquet_file(file_path, omop_version)
 
 @task
-def prepare_bq() -> None:
+def prepare_bq(sites_to_process: List[Tuple[str, str]]) -> None:
     """
     Deletes files and tables from previous pipeline runs
     """
-    site_config = utils.get_site_config_file()
-    sites = utils.get_site_list()
+    # TODO: If failed, update BQ log entry
+    
+    for site_to_process in sites_to_process:
+        site, _ = site_to_process
+        
+        site_config = utils.get_site_config_file()
 
-    utils.logger.warning(f"site_config is {site_config}")
-
-    # TODO: Only for sites that need to be processed...
-    for site in sites:
         project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
 
@@ -161,6 +175,14 @@ def load_to_bq(file_config: dict) -> None:
 
     bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
 
+@task
+def final_cleanup(sites_to_process: List[Tuple[str, str]]) -> None:
+    
+    for unprocessed_site in sites_to_process:
+        site, delivery_date = unprocessed_site
+        utils.bq_log_complete(site, delivery_date)
+
+
 # @task(max_active_tis_per_dag=10)
 # def dummy_testing_task(file_config: dict) -> None:
 #     utils.logger.info(f"Going to validate schema of gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]} against OMOP v{file_config[constants.FileConfig.OMOP_VERSION.value]}")
@@ -170,15 +192,16 @@ with dag:
     api_health_check = check_api_health()
     unprocessed_sites = get_unprocessed_sites()
     # This task will short-circuit (skip downstream tasks) if no sites are returned.
-    sites_exist = check_sites_exist(unprocessed_sites)
+    sites_exist = check_for_unprocessed(unprocessed_sites)
     
     file_list = get_files(sites_to_process=unprocessed_sites)
     process_files = process_incoming_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
     fix_data_file = fix_file.expand(file_config=file_list)
-    clean_bq = prepare_bq()
+    clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
+    cleanup = final_cleanup(sites_to_process=unprocessed_sites)
     
     # Define dependencies
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file
+    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup
