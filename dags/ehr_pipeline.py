@@ -1,8 +1,10 @@
-import airflow
-from airflow import DAG
-from airflow.utils.dates import days_ago
-from airflow.decorators import task, task_group
-from datetime import datetime, timedelta
+import airflow # type: ignore
+from airflow import DAG # type: ignore
+from airflow.utils.dates import days_ago # type: ignore
+from airflow.decorators import task # type: ignore
+from airflow.operators.python import get_current_context # type: ignore
+
+from datetime import timedelta
 import dependencies.utils as utils
 import dependencies.constants as constants
 import dependencies.processing as processing
@@ -11,11 +13,10 @@ import dependencies.bq as bq
 import dependencies.file_config as file_config
 import sys
 
-
 default_args = {
-    'start_date': airflow.utils.dates.days_ago(0),
+    'start_date': airflow.utils.dates.days_ago(1),
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=1),
     'owner': 'airflow'
 }
 
@@ -43,98 +44,183 @@ def check_api_health() -> None:
         utils.logger.error(f"API health check failed: {str(e)}")
         sys.exit(1)
 
-@task(task_id='get_file_list')
-def get_files() -> list[dict]:
+@task()
+def get_unprocessed_sites() -> list[tuple[str, str]]:
+    unprocessed_sites: list[tuple[str, str]] = []
+    sites = utils.get_site_list()
+
+    for site in sites:
+        delivery_date_to_check = utils.get_most_recent_folder(site)
+        site_log_entries = bq.get_bq_log_row(site, delivery_date_to_check)
+
+        # If no log entry exists or the status is not error, mark as unprocessed.
+        # If status is completed or running, we should not mark as unprocessed
+        if not site_log_entries or site_log_entries[0]['status'] == constants.PIPELINE_ERROR_STRING:
+            unprocessed_sites.append((site, delivery_date_to_check))
+
+    return unprocessed_sites
+
+@task.short_circuit
+def check_for_unprocessed(unprocessed_sites: list[tuple[str, str]]) -> bool:
+    """
+    Returns False (which skips downstream tasks) if there are no unprocessed sites.
+    """
+    if not unprocessed_sites:
+        utils.logger.info("No unprocessed sites found. Skipping processing tasks.")
+        return False
+    return True
+
+@task()
+def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed
     """
     utils.logger.info("Getting list of files to process")
     
-    try:        
-        sites = utils.get_site_list()
-        file_configs: list[dict] = []
+    # Store list of files from unprocessed deliveries
+    file_configs: list[dict] = []
 
-        # Iterate over each site
-        # TODO: Only for sites that need to be processed...
-        for site in sites:
-            # Get a list of files from the latest delivery of individual site
+    # Retrieve the current Airflow context and extract the run_id
+    context = get_current_context()
+    run_id = context['dag_run'].run_id if context.get('dag_run') else "unknown"
+    
+    for site_to_process in sites_to_process:
+        site, delivery_date = site_to_process
+
+        site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
+
+        bq.bq_log_start(
+            site,
+            delivery_date,
+            site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value],
+            site_config[constants.FileConfig.OMOP_VERSION.value],
+            run_id
+        )
+
+        try:
             # get_file_list() also creates artifact buckets for the pipeline for a given site delivery
-            files = processing.get_file_list(site)
+            files = processing.get_file_list(site, delivery_date)
 
             for file in files:
                 # Create file configuration dictionaries for each file from a site
                 file_config_obj = file_config.FileConfig(site, file)
                 file_configs.append(file_config_obj.to_dict())
-        
-        return file_configs
-    
-    except Exception as e:
-        utils.logger.error(f"Unable to get file list: {str(e)}")
-        sys.exit(1)
+        except Exception as e:
+            utils.logger.error(f"Unable to get file list: {str(e)}")
+            bq.bq_log_error(site, delivery_date, str(e))
+            sys.exit(1)
+
+    return file_configs
+
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def process_incoming_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file
     """
-    file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
-    gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    
+    try:
+        bq.bq_log_running(site, delivery_date)
+        file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
+        gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
 
-    processing.process_file(file_type, gcs_file_path)
+        processing.process_file(file_type, gcs_file_path)
+    except Exception as e:
+        utils.logger.error(f"Unable to processing incoming file: {e}")
+        bq.bq_log_error(site, delivery_date, str(e))
+        sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specificiations
     """
-    validation.validate_file(
-        file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
-        omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
-        gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
-        delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
-        )
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+
+    try:
+        bq.bq_log_running(site, delivery_date)
+        validation.validate_file(
+            file_path=f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}", 
+            omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
+            gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
+            delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
+            )
+    except Exception as e:
+        utils.logger.error(f"Unable to validate file: {e}")
+        bq.bq_log_error(site, delivery_date, str(e))
+        sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def fix_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure
     """
-    file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
-    file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
-    omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+    try:
+        bq.bq_log_running(site, delivery_date)
+        file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], '')
+        file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
 
-    utils.logger.info(f"Fixing Parquet file gs://{file_path}")
-    processing.fix_parquet_file(file_path, omop_version)
+        omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+
+        utils.logger.info(f"Fixing Parquet file gs://{file_path}")
+        processing.fix_parquet_file(file_path, omop_version)
+    except Exception as e:
+        utils.logger.error(f"Unable to fix file: {e}")
+        bq.bq_log_error(site, delivery_date, str(e))
+        sys.exit(1)
 
 @task
-def prepare_bq() -> None:
+def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
     """
     Deletes files and tables from previous pipeline runs
-    """
-    site_config = utils.get_site_config_file()
-    sites = utils.get_site_list()
+    """    
+    for site_to_process in sites_to_process:
+        try:
+            site, delivery_date = site_to_process
+            bq.bq_log_running(site, delivery_date)
 
-    utils.logger.warning(f"site_config is {site_config}")
+            site_config = utils.get_site_config_file()
 
-    # TODO: Only for sites that need to be processed...
-    for site in sites:
-        project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+            project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
+            dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
 
-        # Delete all tables within BigQuery dataset
-        bq.prep_dataset(project_id, dataset_id)
+            # Delete all tables within BigQuery dataset
+            bq.prep_dataset(project_id, dataset_id)
+        except Exception as e:
+            utils.logger.error(f"Unable to prepare BigQuery: {e}")
+            bq.bq_log_error(site, delivery_date, str(e))
+            sys.exit(1)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table
     """
-    gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
-    project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
-    dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    try:
+        gcs_file_path = f"{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]}"
+        project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
+        dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
 
-    bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
+        bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
+    except Exception as e:
+        utils.logger.error(f"Unable to write to BigQuery: {e}")
+        bq.bq_log_error(site, delivery_date, str(e))
+        sys.exit(1)
+
+@task
+def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
+    
+    for unprocessed_site in sites_to_process:
+        site, delivery_date = unprocessed_site
+        bq.bq_log_complete(site, delivery_date)
 
 # @task(max_active_tis_per_dag=10)
 # def dummy_testing_task(file_config: dict) -> None:
@@ -143,11 +229,18 @@ def load_to_bq(file_config: dict) -> None:
 
 with dag:
     api_health_check = check_api_health()
-    file_list = get_files()
+    unprocessed_sites = get_unprocessed_sites()
+    # This task will short-circuit (skip downstream tasks) if no sites are returned.
+    sites_exist = check_for_unprocessed(unprocessed_sites)
+    
+    file_list = get_files(sites_to_process=unprocessed_sites)
     process_files = process_incoming_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
     fix_data_file = fix_file.expand(file_config=file_list)
-    clean_bq = prepare_bq()
+    clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
-
-api_health_check >> file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file
+    cleanup = final_cleanup(sites_to_process=unprocessed_sites)
+    
+    # Define dependencies
+    api_health_check >> unprocessed_sites >> sites_exist >> file_list
+    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup

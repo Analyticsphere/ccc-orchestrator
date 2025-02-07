@@ -6,6 +6,12 @@ PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-jp-1061430463455.us-centra
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/config/site_config.yml"
 
+PIPELINE_LOG_TABLE = "nih-nci-dceg-connect-dev.ehr_pipeline_metadata.pipeline_runs"
+PIPELINE_START_STRING = "started"
+PIPELINE_RUNNING_STRING = "running"
+PIPELINE_COMPLETE_STRING = "completed"
+PIPELINE_ERROR_STRING = "error"
+
 CSV = ".csv"
 PARQUET = ".parquet"
 
