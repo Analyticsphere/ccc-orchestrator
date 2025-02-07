@@ -1,0 +1,10 @@
+steps:
+  - name: "gcr.io/cloud-builders/gsutil"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Copying local DAGs to Composer bucket: gs://$COMPOSER_BUCKET/dags/"
+        gsutil -m cp -r dags/* gs://"$_COMPOSER_BUCKET"/dags/
+
+timeout: "600s"
