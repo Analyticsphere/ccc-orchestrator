@@ -55,6 +55,7 @@ def process_file(file_type: str, file_path: str) -> None:
         headers=utils.get_auth_header(),
         timeout=(10, 600)
     )
+    
     response.raise_for_status()
 
 def fix_parquet_file(file_path: str, cdm_version: str) -> None:

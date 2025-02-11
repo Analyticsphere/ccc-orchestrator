@@ -13,11 +13,51 @@ import dependencies.bq as bq
 import dependencies.file_config as file_config
 import sys
 
+def on_failure_callback(context):
+    """
+    Callback function that executes when the DAG is manually failed
+    """
+    utils.logger.warning("In on_failure_callback()")
+    print("In on_failure_callback()")
+    
+    dag_run = context.get('dag_run')
+    if not dag_run:
+        utils.logger.warning("No dag_run in context")
+        return
+
+    utils.logger.warning(f"DAG run state: {dag_run.state}")
+    
+    # Check if this was a manual failure
+    task_instances = dag_run.get_task_instances()
+    
+    # Log all task states for debugging
+    for ti in task_instances:
+        utils.logger.warning(f"Task {ti.task_id} state: {ti.state}")
+
+    # A manual failure typically means the DAG was marked failed from the UI
+    # while tasks were either successful, skipped, or not yet run
+    is_manual_failure = (
+        dag_run.state == 'failed' and
+        all(ti.state in ['success', 'skipped', 'upstream_failed', None] 
+            for ti in task_instances)
+    )
+    
+    if is_manual_failure:
+        utils.logger.warning("DAG was manually marked as failed - executing cleanup")
+        try:
+            run_id = dag_run.run_id
+            utils.logger.warning(f"Logging manual failure for run {run_id}")
+            bq.bq_log_error(run_id, "Manually marked as failed")
+        except Exception as e:
+            utils.logger.error(f"Error in failure callback: {str(e)}")
+
+
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),
     'retries': 1,
     'retry_delay': timedelta(minutes=1),
-    'owner': 'airflow'
+    'owner': 'airflow',
+    'on_failure_callback': on_failure_callback
 }
 
 dag = DAG(
@@ -79,15 +119,13 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     
     # Store list of files from unprocessed deliveries
     file_configs: list[dict] = []
-
-    # Retrieve the current Airflow context and extract the run_id
-    context = get_current_context()
-    run_id = context['dag_run'].run_id if context.get('dag_run') else "unknown"
     
     for site_to_process in sites_to_process:
         site, delivery_date = site_to_process
 
         site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
+
+        run_id = utils.get_run_id(get_current_context())
 
         bq.bq_log_start(
             site,
@@ -107,13 +145,13 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
                 file_configs.append(file_config_obj.to_dict())
         except Exception as e:
             utils.logger.error(f"Unable to get file list: {str(e)}")
-            bq.bq_log_error(site, delivery_date, str(e))
+            bq.bq_log_error(run_id, str(e))
             sys.exit(1)
 
     return file_configs
 
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=1, execution_timeout=timedelta(minutes=60))
 def process_incoming_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file
@@ -128,11 +166,11 @@ def process_incoming_file(file_config: dict) -> None:
 
         processing.process_file(file_type, gcs_file_path)
     except Exception as e:
-        utils.logger.error(f"Unable to processing incoming file: {e}")
-        bq.bq_log_error(site, delivery_date, str(e))
+        utils.logger.error(f"Unable to process incoming file: {e}")
+        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
         sys.exit(1)
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=1, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specificiations
@@ -150,10 +188,10 @@ def validate_file(file_config: dict) -> None:
             )
     except Exception as e:
         utils.logger.error(f"Unable to validate file: {e}")
-        bq.bq_log_error(site, delivery_date, str(e))
+        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
         sys.exit(1)
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=1, execution_timeout=timedelta(minutes=60))
 def fix_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure
@@ -172,7 +210,7 @@ def fix_file(file_config: dict) -> None:
         processing.fix_parquet_file(file_path, omop_version)
     except Exception as e:
         utils.logger.error(f"Unable to fix file: {e}")
-        bq.bq_log_error(site, delivery_date, str(e))
+        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
         sys.exit(1)
 
 @task
@@ -194,10 +232,10 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
             bq.prep_dataset(project_id, dataset_id)
         except Exception as e:
             utils.logger.error(f"Unable to prepare BigQuery: {e}")
-            bq.bq_log_error(site, delivery_date, str(e))
+            bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
             sys.exit(1)
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=1, execution_timeout=timedelta(minutes=60))
 def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table
@@ -212,7 +250,7 @@ def load_to_bq(file_config: dict) -> None:
         bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
     except Exception as e:
         utils.logger.error(f"Unable to write to BigQuery: {e}")
-        bq.bq_log_error(site, delivery_date, str(e))
+        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
         sys.exit(1)
 
 @task
@@ -222,7 +260,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         site, delivery_date = unprocessed_site
         bq.bq_log_complete(site, delivery_date)
 
-# @task(max_active_tis_per_dag=10)
+# @task(max_active_tis_per_dag=1)
 # def dummy_testing_task(file_config: dict) -> None:
 #     utils.logger.info(f"Going to validate schema of gs://{file_config[constants.FileConfig.GCS_PATH.value]}/{file_config[constants.FileConfig.DELIVERY_DATE.value]}/{file_config[constants.FileConfig.FILE_NAME.value]} against OMOP v{file_config[constants.FileConfig.OMOP_VERSION.value]}")
 #     utils.logger.info(f"Will write to BQ dataset {file_config[constants.FileConfig.PROJECT_ID.value]}.{file_config[constants.FileConfig.BQ_DATASET.value]}")

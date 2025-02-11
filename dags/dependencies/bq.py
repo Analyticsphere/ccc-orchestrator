@@ -72,11 +72,12 @@ def bq_log_running(site: str, delivery_date: str) -> None:
     )
     reponse.raise_for_status()
 
-def bq_log_error(site: str, delivery_date: str, message: str) -> None:
+def bq_log_error(run_id: str, message: str) -> None:
     status = constants.PIPELINE_ERROR_STRING
 
     reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&message={message}",
+        #f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&message={message}",
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?status={status}&run_id={run_id}&message={message}",
         headers=utils.get_auth_header()
     )
     reponse.raise_for_status()
