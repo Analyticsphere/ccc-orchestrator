@@ -1,9 +1,16 @@
 from enum import Enum
 
 # Main endpoint
-PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-1061430463455.us-central1.run.app"
+#PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-1061430463455.us-central1.run.app"
+PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-jp-1061430463455.us-central1.run.app"
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/config/site_config.yml"
+
+PIPELINE_LOG_TABLE = "nih-nci-dceg-connect-dev.ehr_pipeline_metadata.pipeline_runs_jp"
+PIPELINE_START_STRING = "started"
+PIPELINE_RUNNING_STRING = "running"
+PIPELINE_COMPLETE_STRING = "completed"
+PIPELINE_ERROR_STRING = "error"
 
 CSV = ".csv"
 PARQUET = ".parquet"
