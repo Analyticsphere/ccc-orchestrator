@@ -5,7 +5,7 @@ import sys
 import requests # type: ignore
 import subprocess
 
-def get_file_list(site: str, delivery_date: str) -> list[str]:
+def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
     """
     Get a list of files from a site's latest delivery
     """
@@ -19,7 +19,7 @@ def get_file_list(site: str, delivery_date: str) -> list[str]:
 
         # Make the authenticated request
         response = requests.get(
-            f"{constants.PROCESSOR_ENDPOINT}/get_file_list?bucket={gcs_bucket}&folder={delivery_date}",
+            f"{constants.PROCESSOR_ENDPOINT}/get_file_list?bucket={gcs_bucket}&folder={delivery_date}&file_format={file_format}",
             headers=utils.get_auth_header()
         )
         response.raise_for_status()
