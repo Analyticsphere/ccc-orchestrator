@@ -58,10 +58,10 @@ def process_file(file_type: str, file_path: str) -> None:
     
     response.raise_for_status()
 
-def fix_parquet_file(file_path: str, cdm_version: str) -> None:
-    utils.logger.info(f"Fixing Parquet file gs://{file_path}")
+def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
+    utils.logger.info(f"Normalizing Parquet file gs://{file_path}")
     response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/fix_parquet?file_path={file_path}&omop_version={cdm_version}",
+        f"{constants.PROCESSOR_ENDPOINT}/normalize_parquet?file_path={file_path}&omop_version={cdm_version}",
         headers=utils.get_auth_header()
     )
     response.raise_for_status()

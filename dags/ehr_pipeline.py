@@ -160,7 +160,7 @@ def validate_file(file_config: dict) -> None:
         raise Exception(error_msg)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
-def fix_file(file_config: dict) -> None:
+def normalize_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure.
     """
@@ -180,7 +180,7 @@ def fix_file(file_config: dict) -> None:
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
 
         utils.logger.info(f"Fixing Parquet file gs://{file_path}")
-        processing.fix_parquet_file(file_path, omop_version)
+        processing.normalize_parquet_file(file_path, omop_version)
     except Exception as e:
         error_msg = f"Unable to fix file: {e}"
         utils.logger.error(error_msg)
@@ -273,7 +273,7 @@ with dag:
     # Expand the processing tasks across the list of file configurations.
     process_files = process_incoming_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
-    fix_data_file = fix_file.expand(file_config=file_list)
+    fix_data_file = normalize_file.expand(file_config=file_list)
     
     clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
