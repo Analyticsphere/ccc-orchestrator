@@ -6,7 +6,6 @@ import sys
 import yaml # type: ignore
 from datetime import datetime
 from google.cloud import storage # type: ignore
-from typing import Optional
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
@@ -146,4 +145,8 @@ def get_most_recent_folder(site: str) -> str:
 
     return most_recent_folder
 
+def get_run_id(airflow_context) -> str:
+    # Retrieve run_id from current Airflow context
+    run_id = airflow_context['dag_run'].run_id if airflow_context.get('dag_run') else "unknown"
 
+    return run_id
