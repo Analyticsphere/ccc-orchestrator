@@ -1,12 +1,13 @@
-from . import constants
-from . import file_config
-import requests # type: ignore
-import subprocess
 import logging
+import subprocess
 import sys
-import yaml # type: ignore
 from datetime import datetime
-from google.cloud import storage # type: ignore
+
+import requests  # type: ignore
+import yaml  # type: ignore
+from google.cloud import storage  # type: ignore
+
+from . import constants, file_config
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)

@@ -1,9 +1,10 @@
-from . import utils
-from . import constants
 import logging
-import sys
-import requests # type: ignore
 import subprocess
+import sys
+
+import requests  # type: ignore
+
+from . import constants, utils
 
 def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
     """
