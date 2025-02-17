@@ -237,11 +237,11 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         site, delivery_date = unprocessed_site
         bq.bq_log_complete(site, delivery_date)
 
-# This final task will run regardless of previous task states.
-# It is added to cover the situation in which a user manually fails a DAG run.
-# It is at the scope of the DAG execution, not a particular site or file
 @task(trigger_rule=TriggerRule.ALL_DONE)
 def log_done() -> None:
+    # This final task will run regardless of previous task states.
+    # It is added to cover the situation in which a user manually fails a DAG run.
+    # It is at the scope of the DAG execution, not a particular site or file
     context = get_current_context()
     dag_run = context.get('dag_run')
     run_id = dag_run.run_id
@@ -255,7 +255,6 @@ def log_done() -> None:
 
     if dag_run and "fail" in dag_run.state:
         bq.bq_log_error(run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
-
 
 # Define the DAG structure.
 with dag:
