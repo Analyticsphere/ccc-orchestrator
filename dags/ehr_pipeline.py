@@ -172,6 +172,20 @@ def normalize_file(file_config: dict) -> None:
         bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg)
 
+@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+def cdm_upgrade(file_config: dict) -> None:
+    cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+    file_path = utils.get_file_path(file_config)
+
+    if cdm_version == "5.4":
+        utils.logger.info(f"CDM upgrade not needed for {file_path}")
+        pass
+    elif cdm_version == "5.3":
+        processing.upgrade_cdm(file_path, cdm_version)
+    else:
+        utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
+        raise Exception
+
 @task
 def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
     """
@@ -222,11 +236,10 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site
         bq.bq_log_complete(site, delivery_date)
-    
-
 
 # This final task will run regardless of previous task states.
 # It is added to cover the situation in which a user manually fails a DAG run.
+# It is at the scope of the DAG execution, not a particular site or file
 @task(trigger_rule=TriggerRule.ALL_DONE)
 def log_done() -> None:
     context = get_current_context()
@@ -255,6 +268,7 @@ with dag:
     process_files = process_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
     fix_data_file = normalize_file.expand(file_config=file_list)
+    upgrade_file = cdm_upgrade.expand(file_config=file_list)
     
     clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
@@ -265,4 +279,6 @@ with dag:
     
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup >> all_done
+    file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
+    clean_bq >> load_file >> cleanup >> all_done
+

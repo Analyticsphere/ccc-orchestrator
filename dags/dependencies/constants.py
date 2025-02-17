@@ -35,3 +35,4 @@ class ArtifactPaths(str, Enum):
     REPORT_TMP = f"{ARTIFACTS}delivery_report/tmp/"
     DQD = f"{ARTIFACTS}dqd/"
     INVALID_ROWS = f"{ARTIFACTS}invalid_rows/"
+
