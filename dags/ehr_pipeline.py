@@ -120,11 +120,7 @@ def process_incoming_file(file_config: dict) -> None:
     try:
         bq.bq_log_running(site, delivery_date)
         file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
-        gcs_file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-        )
+        gcs_file_path = utils.get_file_path(file_config)
 
         processing.process_file(file_type, gcs_file_path)
     except Exception as e:
@@ -144,11 +140,7 @@ def validate_file(file_config: dict) -> None:
     try:
         bq.bq_log_running(site, delivery_date)
         validation.validate_file(
-            file_path=(
-                f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/"
-                f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-                f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-            ),
+            file_path=utils.get_file_path(file_config),
             omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
             gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
             delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
@@ -169,14 +161,8 @@ def normalize_file(file_config: dict) -> None:
 
     try:
         bq.bq_log_running(site, delivery_date)
-        file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(
-            file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], ''
-        )
-        file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
-        )
+        
+        file_path = utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
 
         utils.logger.info(f"Fixing Parquet file gs://{file_path}")
@@ -215,11 +201,7 @@ def load_to_bq(file_config: dict) -> None:
     Load OMOP data file to BigQuery table.
     """
     try:
-        gcs_file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-        )
+        gcs_file_path = utils.get_file_path(file_config)
         project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
         dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
 
