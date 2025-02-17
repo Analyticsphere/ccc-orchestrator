@@ -47,7 +47,7 @@ def check_api_health() -> None:
         raise
 
 @task()
-def get_unprocessed_sites() -> list[tuple[str, str]]:
+def get_site_deliveries() -> list[tuple[str, str]]:
     unprocessed_sites: list[tuple[str, str]] = []
     sites = utils.get_site_list()
 
@@ -110,7 +110,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     return file_configs
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
-def process_incoming_file(file_config: dict) -> None:
+def process_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file.
     """
@@ -161,7 +161,7 @@ def normalize_file(file_config: dict) -> None:
 
     try:
         bq.bq_log_running(site, delivery_date)
-        
+
         file_path = utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
 
@@ -248,12 +248,12 @@ def log_done() -> None:
 # Define the DAG structure.
 with dag:
     api_health_check = check_api_health()
-    unprocessed_sites = get_unprocessed_sites()
+    unprocessed_sites = get_site_deliveries()
     sites_exist = check_for_unprocessed(unprocessed_sites)
     file_list = get_files(sites_to_process=unprocessed_sites)
     
     # Expand the processing tasks across the list of file configurations.
-    process_files = process_incoming_file.expand(file_config=file_list)
+    process_files = process_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
     fix_data_file = normalize_file.expand(file_config=file_list)
     
