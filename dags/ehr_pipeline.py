@@ -242,5 +242,7 @@ with dag:
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
     
     # Define dependencies
-    api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup
+    # api_health_check >> unprocessed_sites >> sites_exist >> file_list
+    # file_list >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup
+    
+    api_health_check >> unprocessed_sites >> sites_exist >> process_files >> validate_files >> fix_data_file >> clean_bq >> load_file >> cleanup
