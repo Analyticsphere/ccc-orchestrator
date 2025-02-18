@@ -1,4 +1,5 @@
 from . import constants
+from . import file_config
 import requests # type: ignore
 import subprocess
 import logging
@@ -150,3 +151,12 @@ def get_run_id(airflow_context) -> str:
     run_id = airflow_context['dag_run'].run_id if airflow_context.get('dag_run') else "unknown"
 
     return run_id
+
+def get_file_path(file_config: file_config.FileConfig) -> str:
+    file_path = (
+        f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
+        f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
+        f"{file_config[constants.FileConfig.FILE_NAME.value]}"
+    )
+
+    return file_path

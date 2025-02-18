@@ -47,7 +47,7 @@ def check_api_health() -> None:
         raise
 
 @task()
-def get_unprocessed_sites() -> list[tuple[str, str]]:
+def get_site_deliveries() -> list[tuple[str, str]]:
     unprocessed_sites: list[tuple[str, str]] = []
     sites = utils.get_site_list()
 
@@ -110,7 +110,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     return file_configs
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
-def process_incoming_file(file_config: dict) -> None:
+def process_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file.
     """
@@ -120,11 +120,7 @@ def process_incoming_file(file_config: dict) -> None:
     try:
         bq.bq_log_running(site, delivery_date)
         file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
-        gcs_file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-        )
+        gcs_file_path = utils.get_file_path(file_config)
 
         processing.process_file(file_type, gcs_file_path)
     except Exception as e:
@@ -144,11 +140,7 @@ def validate_file(file_config: dict) -> None:
     try:
         bq.bq_log_running(site, delivery_date)
         validation.validate_file(
-            file_path=(
-                f"gs://{file_config[constants.FileConfig.GCS_PATH.value]}/"
-                f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-                f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-            ),
+            file_path=utils.get_file_path(file_config),
             omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
             gcs_path=file_config[constants.FileConfig.GCS_PATH.value],
             delivery_date=file_config[constants.FileConfig.DELIVERY_DATE.value]
@@ -160,7 +152,7 @@ def validate_file(file_config: dict) -> None:
         raise Exception(error_msg)
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
-def fix_file(file_config: dict) -> None:
+def normalize_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure.
     """
@@ -169,18 +161,12 @@ def fix_file(file_config: dict) -> None:
 
     try:
         bq.bq_log_running(site, delivery_date)
-        file_name = file_config[constants.FileConfig.FILE_NAME.value].replace(
-            file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value], ''
-        )
-        file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{constants.ArtifactPaths.CONVERTED_FILES.value}{file_name}{constants.PARQUET}"
-        )
+
+        file_path = utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
 
         utils.logger.info(f"Fixing Parquet file gs://{file_path}")
-        processing.fix_parquet_file(file_path, omop_version)
+        processing.normalize_parquet_file(file_path, omop_version)
     except Exception as e:
         error_msg = f"Unable to fix file: {e}"
         utils.logger.error(error_msg)
@@ -215,11 +201,7 @@ def load_to_bq(file_config: dict) -> None:
     Load OMOP data file to BigQuery table.
     """
     try:
-        gcs_file_path = (
-            f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
-            f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-            f"{file_config[constants.FileConfig.FILE_NAME.value]}"
-        )
+        gcs_file_path = utils.get_file_path(file_config)
         project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
         dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
 
@@ -266,14 +248,14 @@ def log_done() -> None:
 # Define the DAG structure.
 with dag:
     api_health_check = check_api_health()
-    unprocessed_sites = get_unprocessed_sites()
+    unprocessed_sites = get_site_deliveries()
     sites_exist = check_for_unprocessed(unprocessed_sites)
     file_list = get_files(sites_to_process=unprocessed_sites)
     
     # Expand the processing tasks across the list of file configurations.
-    process_files = process_incoming_file.expand(file_config=file_list)
+    process_files = process_file.expand(file_config=file_list)
     validate_files = validate_file.expand(file_config=file_list)
-    fix_data_file = fix_file.expand(file_config=file_list)
+    fix_data_file = normalize_file.expand(file_config=file_list)
     
     clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
