@@ -21,6 +21,7 @@ This pipeline is designed to run on Google Cloud Composer (managed Airflow) and 
   - Cloud Storage buckets configured
 - OMOP File Processor API endpoint configured and running
 - Site configuration YAML file
+- OMOP data files stored in GCS folders following YYYY-MM-DD date format
 
 ## Configuration
 
@@ -37,14 +38,13 @@ site:
     project_id: 'gcp-project-id'
     bq_dataset: 'bigquery_dataset'
     omop_version: '5.4'
-    post_processing: ['cdm_upgrade']
+    post_processing: ['post_processing_script_name']
 ```
 
 ### Environment Variables
 
-The pipeline expects the following configuration:
+The pipeline requires the following values be set in the constants.py file:
 - `PROCESSOR_ENDPOINT`: URL of the OMOP file processor API
-- `SITE_CONFIG_YML_PATH`: Path to the site configuration YAML file
 - `PIPELINE_LOG_TABLE`: BigQuery table for pipeline logging
 
 ## Pipeline Tasks
