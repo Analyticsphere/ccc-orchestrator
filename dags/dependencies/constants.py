@@ -11,6 +11,8 @@ PIPELINE_START_STRING = "started"
 PIPELINE_RUNNING_STRING = "running"
 PIPELINE_COMPLETE_STRING = "completed"
 PIPELINE_ERROR_STRING = "error"
+PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
+
 
 CSV = ".csv"
 PARQUET = ".parquet"
