@@ -175,7 +175,7 @@ def normalize_file(file_config: dict) -> None:
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def cdm_upgrade(file_config: dict) -> None:
     """
-    Upgrade CDM version 5.3 to target version (currently 5.4)
+    Upgrade CDM version (currently supports 5.3 -> 5.4)
     """
     cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
     file_path = utils.get_file_path(file_config)
