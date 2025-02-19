@@ -181,7 +181,7 @@ def cdm_upgrade(file_config: dict) -> None:
     file_path = utils.get_file_path(file_config)
 
     if cdm_version == constants.TARGET_CDM_VERSION:
-        utils.logger.info(f"CDM upgrade not needed for {file_path}")
+        utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.TARGET_CDM_VERSION}; upgrade not needed")
         pass
     elif cdm_version == "5.3":
         processing.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
