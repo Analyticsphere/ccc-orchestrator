@@ -12,6 +12,7 @@ PIPELINE_COMPLETE_STRING = "completed"
 PIPELINE_ERROR_STRING = "error"
 PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 
+TARGET_CDM_VERSION = "5.4"
 
 CSV = ".csv"
 PARQUET = ".parquet"
