@@ -1,5 +1,4 @@
-from . import utils
-from . import constants
+from . import constants, utils
 
 class FileConfig:
     def __init__(self, site: str, file_name: str):
