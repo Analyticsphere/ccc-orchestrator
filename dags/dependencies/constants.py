@@ -12,6 +12,8 @@ PIPELINE_COMPLETE_STRING = "completed"
 PIPELINE_ERROR_STRING = "error"
 PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 
+TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
+VOCAB_REF_GCS_BUCKET = "ehr_pipeline_vocabulary_files"
 
 CSV = ".csv"
 PARQUET = ".parquet"
