@@ -65,10 +65,10 @@ def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
     )
     response.raise_for_status()
 
-def upgrade_cdm(file_path: str, cdm_version: str) -> None:
-    utils.logger.info(f"Upgrading CDM version of gs://{file_path}")
+def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> None:
+    utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
     response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/upgrade_cdm?file_path={file_path}&omop_version={cdm_version}",
+        f"{constants.PROCESSOR_ENDPOINT}/upgrade_cdm?file_path={file_path}&omop_version={cdm_version}&target_omop_version={target_cdm_version}",
         headers=utils.get_auth_header()
     )
     response.raise_for_status()

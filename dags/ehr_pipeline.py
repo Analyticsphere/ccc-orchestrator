@@ -179,14 +179,17 @@ def normalize_file(file_config: dict) -> None:
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def cdm_upgrade(file_config: dict) -> None:
+    """
+    Upgrade CDM version (currently supports 5.3 -> 5.4)
+    """
     cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
     file_path = utils.get_file_path(file_config)
 
-    if cdm_version == "5.4":
-        utils.logger.info(f"CDM upgrade not needed for {file_path}")
+    if cdm_version == constants.TARGET_CDM_VERSION:
+        utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.TARGET_CDM_VERSION}; upgrade not needed")
         pass
     elif cdm_version == "5.3":
-        processing.upgrade_cdm(file_path, cdm_version)
+        processing.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
     else:
         utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
         raise Exception
