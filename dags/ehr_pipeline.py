@@ -243,6 +243,9 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
 
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site
+
+        validation.generate_delivery_report(site, utils.get_site_bucket(site), delivery_date)
+
         bq.bq_log_complete(site, delivery_date)
 
 @task(trigger_rule=TriggerRule.ALL_DONE)
