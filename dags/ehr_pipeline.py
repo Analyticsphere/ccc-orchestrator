@@ -7,6 +7,8 @@ import dependencies.file_config as file_config
 import dependencies.processing as processing
 import dependencies.utils as utils
 import dependencies.validation as validation
+import dependencies.omop as omop
+
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.operators.python import get_current_context  # type: ignore
@@ -46,9 +48,12 @@ def check_api_health() -> None:
         raise
 
 @task()
-def get_site_deliveries() -> list[tuple[str, str]]:
+def prepare_for_run() -> list[tuple[str, str]]:
     unprocessed_sites: list[tuple[str, str]] = []
     sites = utils.get_site_list()
+
+    # Generate the optimized vocabulary files
+    omop.create_optimized_vocab(constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
 
     for site in sites:
         delivery_date_to_check = utils.get_most_recent_folder(site)
@@ -262,7 +267,7 @@ def log_done() -> None:
 # Define the DAG structure.
 with dag:
     api_health_check = check_api_health()
-    unprocessed_sites = get_site_deliveries()
+    unprocessed_sites = prepare_for_run()
     sites_exist = check_for_unprocessed(unprocessed_sites)
     file_list = get_files(sites_to_process=unprocessed_sites)
     

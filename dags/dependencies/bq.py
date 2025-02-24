@@ -59,7 +59,7 @@ def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: st
     status = constants.PIPELINE_START_STRING
 
     reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&file_type={file_type}&omop_version={omop_version}&run_id={run_id}",
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?logging_table={constants.PIPELINE_LOG_TABLE}&site_name={site}&delivery_date={delivery_date}&status={status}&file_type={file_type}&omop_version={omop_version}&run_id={run_id}",
         headers=utils.get_auth_header()
     )
     reponse.raise_for_status()
@@ -68,7 +68,7 @@ def bq_log_running(site: str, delivery_date: str) -> None:
     status = constants.PIPELINE_RUNNING_STRING
 
     reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?logging_table={constants.PIPELINE_LOG_TABLE}&site_name={site}&delivery_date={delivery_date}&status={status}",
         headers=utils.get_auth_header()
     )
     reponse.raise_for_status()
@@ -77,8 +77,7 @@ def bq_log_error(run_id: str, message: str) -> None:
     status = constants.PIPELINE_ERROR_STRING
 
     reponse = requests.get(
-        #f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&message={message}",
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?status={status}&run_id={run_id}&message={message}",
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?logging_table={constants.PIPELINE_LOG_TABLE}&status={status}&run_id={run_id}&message={message}",
         headers=utils.get_auth_header()
     )
     reponse.raise_for_status()
@@ -87,7 +86,7 @@ def bq_log_complete(site: str, delivery_date: str) -> None:
     status = constants.PIPELINE_COMPLETE_STRING
 
     reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
+        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?logging_table={constants.PIPELINE_LOG_TABLE}&site_name={site}&delivery_date={delivery_date}&status={status}",
         headers=utils.get_auth_header()
     )
     reponse.raise_for_status()
