@@ -10,10 +10,11 @@ def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_pat
     )
     response.raise_for_status()
 
-def generate_delivery_report(site: str, bucket: str, delivery_date: str) -> None:
-    utils.logger.info(f"Generating final delivery report for {delivery_date} delivery from {site}")
-    response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/generate_delivery_report?site={site}&bucket={bucket}&delivery_date={delivery_date}",
-        headers=utils.get_auth_header()
+def generate_delivery_report(report_data: dict) -> None:
+    utils.logger.info(f"Generating final delivery report for {report_data['delivery_date']} delivery from {report_data['site']}")
+    response = requests.post(
+        f"{constants.PROCESSOR_ENDPOINT}/generate_delivery_report",
+        headers=utils.get_auth_header(),
+        json=report_data
     )
     response.raise_for_status()
