@@ -9,3 +9,12 @@ def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_pat
         headers=utils.get_auth_header()
     )
     response.raise_for_status()
+
+def generate_delivery_report(report_data: dict) -> None:
+    utils.logger.info(f"Generating final delivery report for {report_data['delivery_date']} delivery from {report_data['site']}")
+    response = requests.post(
+        f"{constants.PROCESSOR_ENDPOINT}/generate_delivery_report",
+        headers=utils.get_auth_header(),
+        json=report_data
+    )
+    response.raise_for_status()

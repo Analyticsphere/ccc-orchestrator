@@ -243,6 +243,20 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
 
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site
+
+        report_data = {
+            "site": site,
+            "gcs_bucket": utils.get_site_bucket(site),
+            "delivery_date": delivery_date,
+            "site_display_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
+            "file_delivery_format": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.FILE_DELIVERY_FORMAT.value],
+            "delivered_cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
+            "target_vocabulary_version": constants.TARGET_VOCAB_VERSION,
+            "target_cdm_version": constants.TARGET_CDM_VERSION,
+        }
+
+        validation.generate_delivery_report(report_data)
+
         bq.bq_log_complete(site, delivery_date)
 
 @task(trigger_rule=TriggerRule.ALL_DONE)
