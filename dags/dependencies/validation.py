@@ -18,3 +18,4 @@ def generate_delivery_report(report_data: dict) -> None:
         json=report_data
     )
     response.raise_for_status()
+

@@ -244,6 +244,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site
 
+        # Generate final data delivery report
         report_data = {
             "site": site,
             "gcs_bucket": utils.get_site_bucket(site),
@@ -256,6 +257,11 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         }
 
         validation.generate_delivery_report(report_data)
+
+        # Create empty tables for OMOP files not provided in delivery
+        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        omop.create_missing_omop_tables(project_id, dataset_id, constants.TARGET_CDM_VERSION)
 
         bq.bq_log_complete(site, delivery_date)
 
