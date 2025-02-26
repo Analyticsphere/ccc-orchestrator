@@ -14,6 +14,7 @@ from airflow.decorators import task  # type: ignore
 from airflow.operators.python import get_current_context  # type: ignore
 from airflow.utils.dates import days_ago  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule
+from airflow.exceptions import AirflowException
 
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),
@@ -109,7 +110,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
             error_msg = f"Unable to get file list: {str(e)}"
             utils.logger.error(error_msg)
             bq.bq_log_error(run_id, str(e))
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     return file_configs
 
@@ -131,7 +132,7 @@ def process_file(file_config: dict) -> None:
         error_msg = f"Unable to process incoming file: {e}"
         utils.logger.error(error_msg)
         bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
@@ -153,7 +154,7 @@ def validate_file(file_config: dict) -> None:
         error_msg = f"Unable to validate file: {e}"
         utils.logger.error(error_msg)
         bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def normalize_file(file_config: dict) -> None:
@@ -175,7 +176,7 @@ def normalize_file(file_config: dict) -> None:
         error_msg = f"Unable to fix file: {e}"
         utils.logger.error(error_msg)
         bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def cdm_upgrade(file_config: dict) -> None:
@@ -192,7 +193,7 @@ def cdm_upgrade(file_config: dict) -> None:
         processing.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
     else:
         utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
-        raise Exception
+        raise Exception(f"OMOP CDM version {cdm_version} not supported")
 
 @task
 def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
@@ -214,7 +215,7 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
             error_msg = f"Unable to prepare BigQuery: {e}"
             utils.logger.error(error_msg)
             bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
 def load_to_bq(file_config: dict) -> None:
@@ -231,7 +232,7 @@ def load_to_bq(file_config: dict) -> None:
         error_msg = f"Unable to write to BigQuery: {e}"
         utils.logger.error(error_msg)
         bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 @task
 def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
@@ -260,24 +261,31 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         # Add completed log entry to BigQuery tracking table
         bq.bq_log_complete(site, delivery_date)
 
-@task(trigger_rule=TriggerRule.ALL_DONE)
+@task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
 def log_done() -> None:
     # This final task will run regardless of previous task states.
-    # It is added to cover the situation in which a user manually fails a DAG run.
-    # It is at the scope of the DAG execution, not a particular site or file
     context = get_current_context()
     dag_run = context.get('dag_run')
     run_id = dag_run.run_id
     task_instances = dag_run.get_task_instances()
     
-    # All tasks in the DAG must succded to be considered a pass
-    # If any of the tasks have a failed state, the entire DAG run fails
+    failures_detected = False
+    
+    # Check if any tasks failed
     for ti in task_instances:
         if "fail" in ti.state.lower():
             bq.bq_log_error(run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
+            failures_detected = True
 
-    if dag_run and "fail" in dag_run.state:
+    # Check if the dag_run itself is in a failed state
+    if dag_run and "fail" in dag_run.state.lower():
         bq.bq_log_error(run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
+        failures_detected = True
+    
+    # Raise an exception to fail this task (and thus the entire DAG)
+    if failures_detected:
+        utils.logger.error("Failures detected in DAG execution. Marking the DAG as failed.")
+        raise AirflowException("DAG execution failed due to one or more task failures.")
 
 # Define the DAG structure.
 with dag:

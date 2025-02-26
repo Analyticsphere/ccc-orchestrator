@@ -33,7 +33,7 @@ def get_gcloud_token() -> str:
         return token
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to get gcloud token: {e}")
-        sys.exit(1)
+        raise Exception(f"Failed to get gcloud token: {e}") from e
 
 def get_auth_header() -> dict[str, str]:
     """
@@ -47,11 +47,8 @@ def check_service_health(base_url: str) -> dict:
     Call the heartbeat endpoint to check service health.
     """
     logger.info("Trying to get API health status")
-    try:
-        # Get the token
-        # token = get_gcloud_token()
-        
-        # Make the authenticated request
+    try:        
+        # Make authenticated request
         response = requests.get(
             f"{base_url}/heartbeat",
             headers=get_auth_header()
@@ -61,10 +58,10 @@ def check_service_health(base_url: str) -> dict:
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Error getting authentication token: {e}")
-        sys.exit(1)
+        raise Exception(f"Error getting authentication token: {e}") from e
     except requests.exceptions.RequestException as e:
         logger.error(f"Error checking service health: {e}")
-        sys.exit(1)
+        raise Exception(f"Error checking service health: {e}") from e
 
 def get_site_bucket(site: str) -> str:
     """
@@ -83,7 +80,7 @@ def get_site_config_file() -> dict:
         return config
     except Exception as e:
         logger.error(f"Unable to get site configuration file: {e}")
-        sys.exit(1)
+        raise Exception(f"Unable to get site configuration file: {e}") from e
 
 def get_site_list() -> list[str]:
     """
