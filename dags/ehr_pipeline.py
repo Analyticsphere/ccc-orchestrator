@@ -170,7 +170,6 @@ def normalize_file(file_config: dict) -> None:
         file_path = utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
 
-        utils.logger.info(f"Fixing Parquet file gs://{file_path}")
         processing.normalize_parquet_file(file_path, omop_version)
     except Exception as e:
         error_msg = f"Unable to fix file: {e}"
@@ -183,18 +182,29 @@ def cdm_upgrade(file_config: dict) -> None:
     """
     Upgrade CDM version (currently supports 5.3 -> 5.4)
     """
-    cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
-    file_path = utils.get_file_path(file_config)
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
-    if cdm_version == constants.TARGET_CDM_VERSION:
-        utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.TARGET_CDM_VERSION}; upgrade not needed")
-        pass
-    elif cdm_version == "5.3":
-        processing.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
-    else:
-        utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
-        raise Exception(f"OMOP CDM version {cdm_version} not supported")
+    try:
+        bq.bq_log_running(site, delivery_date)
 
+        cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+        file_path = utils.get_file_path(file_config)
+
+        if cdm_version == constants.TARGET_CDM_VERSION:
+            utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.TARGET_CDM_VERSION}; upgrade not needed")
+            pass
+        elif cdm_version == "5.3":
+            processing.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
+        else:
+            utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
+            raise Exception(f"OMOP CDM version {cdm_version} not supported")
+    except Exception as e:
+        error_msg = f"Unable to upgrade file: {e}"
+        utils.logger.error(error_msg)
+        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+    
 @task
 def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
     """
@@ -222,7 +232,12 @@ def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table.
     """
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+
     try:
+        bq.bq_log_running(site, delivery_date)
+
         gcs_file_path = utils.get_file_path(file_config)
         project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
         dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
@@ -240,26 +255,34 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     Perform final data cleanup here.
     """
     # Implement any cleanup logic if needed.
-    utils.logger.info("Final cleanup executed.")
+    utils.logger.info("Executing final cleanup tasks")
 
     for unprocessed_site in sites_to_process:
         site, delivery_date = unprocessed_site
 
-        # Generate final data delivery report
-        report_data = omop.generate_report_json(site, delivery_date)
-        validation.generate_delivery_report(report_data)
+        try:
+            bq.bq_log_running(site, delivery_date)
+            
+            # Generate final data delivery report
+            report_data = omop.generate_report_json(site, delivery_date)
+            validation.generate_delivery_report(report_data)
 
-        # Create empty tables for OMOP files not provided in delivery
-        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-        omop.create_missing_omop_tables(project_id, dataset_id, constants.TARGET_CDM_VERSION)
-        
-        # Add record to cdm_source table in BigQuery, if not provided by site
-        cdm_source_data = omop.generate_cdm_source_json(site, delivery_date)
-        omop.populate_cdm_source(cdm_source_data)
+            # Create empty tables for OMOP files not provided in delivery
+            project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+            dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+            omop.create_missing_omop_tables(project_id, dataset_id, constants.TARGET_CDM_VERSION)
+            
+            # Add record to cdm_source table in BigQuery, if not provided by site
+            cdm_source_data = omop.generate_cdm_source_json(site, delivery_date)
+            omop.populate_cdm_source(cdm_source_data)
 
-        # Add completed log entry to BigQuery tracking table
-        bq.bq_log_complete(site, delivery_date)
+            # Add completed log entry to BigQuery tracking table
+            bq.bq_log_complete(site, delivery_date)
+        except Exception as e:
+            error_msg = f"Unable to perform final cleanup: {e}"
+            utils.logger.error(error_msg)
+            bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+            raise Exception(error_msg) from e
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
 def log_done() -> None:

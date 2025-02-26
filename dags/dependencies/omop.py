@@ -1,4 +1,3 @@
-import requests  # type: ignore
 from datetime import datetime
 
 from . import constants, utils
@@ -42,35 +41,31 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
 
 def create_optimized_vocab(vocab_version: str, vocab_gcs_bucket: str) -> None:
     utils.logger.info(f"Creating optimized version of {vocab_version} if required")
-    response = requests.post(
-        f"{constants.PROCESSOR_ENDPOINT}/create_optimized_vocab",
-        headers=utils.get_auth_header(),
-        json={
+    
+    utils.make_api_call(
+        endpoint="create_optimized_vocab",
+        json_data={
             "vocab_version": vocab_version,
             "vocab_gcs_bucket": vocab_gcs_bucket
         }
     )
-    response.raise_for_status()
 
 def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: str) -> None:
     utils.logger.info(f"Creating any missing OMOP tables in {project_id}.{dataset_id}")
-    response = requests.post(
-        f"{constants.PROCESSOR_ENDPOINT}/create_missing_tables",
-        headers=utils.get_auth_header(),
-        json={
+    
+    utils.make_api_call(
+        endpoint="create_missing_tables",
+        json_data={
             "omop_version": omop_version,
             "project_id": project_id,
             "dataset_id": dataset_id
         }
     )
-    response.raise_for_status()
 
-def populate_cdm_source(cdm_source_data: dict, ) -> None:
+def populate_cdm_source(cdm_source_data: dict) -> None:
     utils.logger.info(f"If empty, populating cdm_source table for {cdm_source_data['source_release_date']} delivery from {cdm_source_data['cdm_source_abbreviation']}")
-    # This was already using POST, so no changes needed
-    response = requests.post(
-        f"{constants.PROCESSOR_ENDPOINT}/populate_cdm_source",
-        headers=utils.get_auth_header(),
-        json=cdm_source_data
+    
+    utils.make_api_call(
+        endpoint="populate_cdm_source",
+        json_data=cdm_source_data
     )
-    response.raise_for_status()

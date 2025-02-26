@@ -2,6 +2,7 @@ import logging
 import subprocess
 import sys
 from datetime import datetime
+from typing import Optional, Dict, Any
 
 import requests  # type: ignore
 import yaml  # type: ignore
@@ -158,3 +159,61 @@ def get_file_path(file_config: file_config.FileConfig) -> str:
     )
 
     return file_path
+
+def make_api_call(endpoint: str, method: str = "post", 
+                 params: Optional[Dict[str, str]] = None, 
+                 json_data: Optional[Dict[str, Any]] = None, 
+                 timeout: Optional[tuple] = None) -> Optional[Any]:
+    """
+    Makes an API call to the processor endpoint with standardized error handling.
+    """
+    url = f"{constants.PROCESSOR_ENDPOINT}/{endpoint}"
+
+    # pipeline_log calls are made often and clutter the logs, don't display this message
+    if endpoint != "pipeline_log":
+        logger.info(f"Making {method.upper()} request to {url}")
+    
+    try:
+        if method.lower() == "get":
+            response = requests.get(
+                url,
+                headers=get_auth_header(),
+                params=params,
+                timeout=timeout
+            )
+        else:  # POST
+            response = requests.post(
+                url,
+                headers=get_auth_header(),
+                json=json_data,
+                timeout=timeout
+            )
+        
+        # Check if the request was successful
+        if response.status_code != 200:
+            error_message = f"API Error {response.status_code} from {endpoint}: {response.text}"
+            logger.error(error_message)
+            raise Exception(error_message)
+        
+        # Try to parse as JSON, but handle non-JSON responses
+        if response.content:
+            try:
+                return response.json()
+            except ValueError:
+                # Not JSON, return text instead
+                return response.text
+        return None
+        
+    except requests.exceptions.JSONDecodeError as e:
+        # This shouldn't normally be reached with the try/except above,
+        # but keeping it as a fallback
+        logger.warning(f"Response from {endpoint} was not valid JSON: {response.text}")
+        return response.text
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Error getting authentication token for {endpoint}: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Network error when calling {endpoint}: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e
