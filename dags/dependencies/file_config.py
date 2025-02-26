@@ -9,7 +9,7 @@ class FileConfig:
         self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
         self.gcs_path = self.site_config[constants.FileConfig.GCS_PATH.value]
         self.file_delivery_format = self.site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]
-        self.bq_table = self.site_config[constants.FileConfig.BQ_DATASET.value]
+        self.bq_dataset = self.site_config[constants.FileConfig.BQ_DATASET.value]
         self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
 
     def to_dict(self):
@@ -20,7 +20,7 @@ class FileConfig:
             constants.FileConfig.FILE_DELIVERY_FORMAT.value: self.file_delivery_format,
             constants.FileConfig.PROJECT_ID.value: self.project_id,
             constants.FileConfig.GCS_PATH.value: self.gcs_path,
-            constants.FileConfig.BQ_DATASET.value: self.bq_table,
+            constants.FileConfig.BQ_DATASET.value: self.bq_dataset,
             constants.FileConfig.OMOP_VERSION.value: self.omop_version
         }
 
