@@ -2,7 +2,7 @@ import logging
 import subprocess
 import sys
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import requests  # type: ignore
 import yaml  # type: ignore

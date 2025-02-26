@@ -4,17 +4,16 @@ import airflow  # type: ignore
 import dependencies.bq as bq
 import dependencies.constants as constants
 import dependencies.file_config as file_config
+import dependencies.omop as omop
 import dependencies.processing as processing
 import dependencies.utils as utils
 import dependencies.validation as validation
-import dependencies.omop as omop
-
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
+from airflow.exceptions import AirflowException
 from airflow.operators.python import get_current_context  # type: ignore
 from airflow.utils.dates import days_ago  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule
-from airflow.exceptions import AirflowException
 
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),

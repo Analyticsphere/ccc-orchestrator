@@ -3,6 +3,7 @@ from google.cloud.exceptions import NotFound  # type: ignore
 
 from . import constants, utils
 
+
 def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Loading Parquet file gs://{file_path} to {project_id}.{dataset_id}")
     
