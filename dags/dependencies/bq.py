@@ -76,7 +76,7 @@ def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: st
         }
     )
 
-def bq_log_running(site: str, delivery_date: str) -> None:
+def bq_log_running(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_RUNNING_STRING
 
     utils.make_api_call(
@@ -85,24 +85,27 @@ def bq_log_running(site: str, delivery_date: str) -> None:
             "logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
-            "status": status
+            "status": status,
+            "run_id": run_id
         }
     )
 
-def bq_log_error(run_id: str, message: str) -> None:
+def bq_log_error(site: str, delivery_date: str, run_id: str, message: str) -> None:
     status = constants.PIPELINE_ERROR_STRING
 
     utils.make_api_call(
         endpoint="pipeline_log",
         json_data={
             "logging_table": constants.PIPELINE_LOG_TABLE,
+            "site_name": site,
+            "delivery_date": delivery_date,
             "status": status,
             "run_id": run_id,
             "message": message
         }
     )
 
-def bq_log_complete(site: str, delivery_date: str) -> None:
+def bq_log_complete(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_COMPLETE_STRING
 
     utils.make_api_call(
@@ -111,6 +114,7 @@ def bq_log_complete(site: str, delivery_date: str) -> None:
             "logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
-            "status": status
+            "status": status,
+            "run_id": run_id
         }
     )

@@ -48,7 +48,7 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
     utils.logger.info(f"Processing incoming {file_type} file gs://{gcs_file_path}")
     
     utils.make_api_call(
-        endpoint="convert_to_parquet",
+        endpoint="process_incoming_file",
         json_data={
             "file_type": file_type,
             "file_path": gcs_file_path

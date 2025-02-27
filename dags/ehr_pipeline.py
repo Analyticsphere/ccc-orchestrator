@@ -108,7 +108,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
         except Exception as e:
             error_msg = f"Unable to get file list: {str(e)}"
             utils.logger.error(error_msg)
-            bq.bq_log_error(run_id, str(e))
+            bq.bq_log_error(site, delivery_date, run_id, str(e))
             raise Exception(error_msg) from e
 
     return file_configs
@@ -122,7 +122,7 @@ def process_file(file_config: dict) -> None:
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
     
     try:
-        bq.bq_log_running(site, delivery_date)
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
         file_type = f"{file_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]}"
         gcs_file_path = utils.get_file_path(file_config)
 
@@ -130,7 +130,7 @@ def process_file(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to process incoming file: {e}"
         utils.logger.error(error_msg)
-        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -142,7 +142,7 @@ def validate_file(file_config: dict) -> None:
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
     try:
-        bq.bq_log_running(site, delivery_date)
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
         validation.validate_file(
             file_path=utils.get_file_path(file_config),
             omop_version=file_config[constants.FileConfig.OMOP_VERSION.value],
@@ -152,7 +152,7 @@ def validate_file(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to validate file: {e}"
         utils.logger.error(error_msg)
-        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -164,7 +164,7 @@ def normalize_file(file_config: dict) -> None:
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
     try:
-        bq.bq_log_running(site, delivery_date)
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
         file_path = utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
@@ -173,7 +173,7 @@ def normalize_file(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to fix file: {e}"
         utils.logger.error(error_msg)
-        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -185,7 +185,7 @@ def cdm_upgrade(file_config: dict) -> None:
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
     try:
-        bq.bq_log_running(site, delivery_date)
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
         cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
         file_path = utils.get_file_path(file_config)
@@ -201,7 +201,7 @@ def cdm_upgrade(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to upgrade file: {e}"
         utils.logger.error(error_msg)
-        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
     
 @task
@@ -212,7 +212,7 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
     for site_to_process in sites_to_process:
         try:
             site, delivery_date = site_to_process
-            bq.bq_log_running(site, delivery_date)
+            bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
             site_config = utils.get_site_config_file()
             project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
@@ -223,7 +223,7 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
         except Exception as e:
             error_msg = f"Unable to prepare BigQuery: {e}"
             utils.logger.error(error_msg)
-            bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+            bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
             raise Exception(error_msg) from e
 
 @task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
@@ -235,7 +235,7 @@ def load_to_bq(file_config: dict) -> None:
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
 
     try:
-        bq.bq_log_running(site, delivery_date)
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
         gcs_file_path = utils.get_file_path(file_config)
         project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
@@ -245,7 +245,7 @@ def load_to_bq(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to write to BigQuery: {e}"
         utils.logger.error(error_msg)
-        bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
 @task
@@ -260,7 +260,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         site, delivery_date = unprocessed_site
 
         try:
-            bq.bq_log_running(site, delivery_date)
+            bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
             
             # Generate final data delivery report
             report_data = omop.generate_report_json(site, delivery_date)
@@ -276,11 +276,11 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             omop.populate_cdm_source(cdm_source_data)
 
             # Add completed log entry to BigQuery tracking table
-            bq.bq_log_complete(site, delivery_date)
+            bq.bq_log_complete(site, delivery_date, utils.get_run_id(get_current_context()))
         except Exception as e:
             error_msg = f"Unable to perform final cleanup: {e}"
             utils.logger.error(error_msg)
-            bq.bq_log_error(utils.get_run_id(get_current_context()), str(e))
+            bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
             raise Exception(error_msg) from e
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
@@ -296,12 +296,12 @@ def log_done() -> None:
     # Check if any tasks failed
     for ti in task_instances:
         if "fail" in ti.state.lower():
-            bq.bq_log_error(run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
+            bq.bq_log_error("ALL SITES", "ALL DELIVERIES", run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
             failures_detected = True
 
     # Check if the dag_run itself is in a failed state
     if dag_run and "fail" in dag_run.state.lower():
-        bq.bq_log_error(run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
+        bq.bq_log_error("ALL SITES", "ALL DELIVERIES", run_id, constants.PIPELINE_DAG_FAIL_MESSAGE)
         failures_detected = True
     
     # Raise an exception to fail this task (and thus the entire DAG)
