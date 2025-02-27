@@ -245,24 +245,19 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         site, delivery_date = unprocessed_site
 
         # Generate final data delivery report
-        report_data = {
-            "site": site,
-            "gcs_bucket": utils.get_site_bucket(site),
-            "delivery_date": delivery_date,
-            "site_display_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
-            "file_delivery_format": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.FILE_DELIVERY_FORMAT.value],
-            "delivered_cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
-            "target_vocabulary_version": constants.TARGET_VOCAB_VERSION,
-            "target_cdm_version": constants.TARGET_CDM_VERSION,
-        }
-
+        report_data = omop.generate_report_json(site, delivery_date)
         validation.generate_delivery_report(report_data)
 
         # Create empty tables for OMOP files not provided in delivery
         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
         omop.create_missing_omop_tables(project_id, dataset_id, constants.TARGET_CDM_VERSION)
+        
+        # Add record to cdm_source table in BigQuery, if not provided by site
+        cdm_source_data = omop.generate_cdm_source_json(site, delivery_date)
+        omop.populate_cdm_source(cdm_source_data)
 
+        # Add completed log entry to BigQuery tracking table
         bq.bq_log_complete(site, delivery_date)
 
 @task(trigger_rule=TriggerRule.ALL_DONE)
