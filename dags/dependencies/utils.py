@@ -1,11 +1,14 @@
-from . import constants
-import requests # type: ignore
-import subprocess
 import logging
+import subprocess
 import sys
-import yaml # type: ignore
 from datetime import datetime
-from google.cloud import storage # type: ignore
+from typing import Any, Dict, Optional
+
+import requests  # type: ignore
+import yaml  # type: ignore
+from google.cloud import storage  # type: ignore
+
+from . import constants, file_config
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
@@ -31,7 +34,7 @@ def get_gcloud_token() -> str:
         return token
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to get gcloud token: {e}")
-        sys.exit(1)
+        raise Exception(f"Failed to get gcloud token: {e}") from e
 
 def get_auth_header() -> dict[str, str]:
     """
@@ -45,11 +48,8 @@ def check_service_health(base_url: str) -> dict:
     Call the heartbeat endpoint to check service health.
     """
     logger.info("Trying to get API health status")
-    try:
-        # Get the token
-        # token = get_gcloud_token()
-        
-        # Make the authenticated request
+    try:        
+        # Make authenticated request
         response = requests.get(
             f"{base_url}/heartbeat",
             headers=get_auth_header()
@@ -59,10 +59,10 @@ def check_service_health(base_url: str) -> dict:
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Error getting authentication token: {e}")
-        sys.exit(1)
+        raise Exception(f"Error getting authentication token: {e}") from e
     except requests.exceptions.RequestException as e:
         logger.error(f"Error checking service health: {e}")
-        sys.exit(1)
+        raise Exception(f"Error checking service health: {e}") from e
 
 def get_site_bucket(site: str) -> str:
     """
@@ -81,7 +81,7 @@ def get_site_config_file() -> dict:
         return config
     except Exception as e:
         logger.error(f"Unable to get site configuration file: {e}")
-        sys.exit(1)
+        raise Exception(f"Unable to get site configuration file: {e}") from e
 
 def get_site_list() -> list[str]:
     """
@@ -150,3 +150,70 @@ def get_run_id(airflow_context) -> str:
     run_id = airflow_context['dag_run'].run_id if airflow_context.get('dag_run') else "unknown"
 
     return run_id
+
+def get_file_path(file_config: file_config.FileConfig) -> str:
+    file_path = (
+        f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
+        f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
+        f"{file_config[constants.FileConfig.FILE_NAME.value]}"
+    )
+
+    return file_path
+
+def make_api_call(endpoint: str, method: str = "post", 
+                 params: Optional[Dict[str, str]] = None, 
+                 json_data: Optional[Dict[str, Any]] = None, 
+                 timeout: Optional[tuple] = None) -> Optional[Any]:
+    """
+    Makes an API call to the processor endpoint with standardized error handling.
+    """
+    url = f"{constants.PROCESSOR_ENDPOINT}/{endpoint}"
+
+    # pipeline_log calls are made often and clutter the logs, don't display this message
+    if endpoint != "pipeline_log":
+        logger.info(f"Making {method.upper()} request to {url}")
+    
+    try:
+        if method.lower() == "get":
+            response = requests.get(
+                url,
+                headers=get_auth_header(),
+                params=params,
+                timeout=timeout
+            )
+        else:  # POST
+            response = requests.post(
+                url,
+                headers=get_auth_header(),
+                json=json_data,
+                timeout=timeout
+            )
+        
+        # Check if the request was successful
+        if response.status_code != 200:
+            error_message = f"API Error {response.status_code} from {endpoint}: {response.text}"
+            logger.error(error_message)
+            raise Exception(error_message)
+        
+        # Try to parse as JSON, but handle non-JSON responses
+        if response.content:
+            try:
+                return response.json()
+            except ValueError:
+                # Not JSON, return text instead
+                return response.text
+        return None
+        
+    except requests.exceptions.JSONDecodeError as e:
+        # This shouldn't normally be reached with the try/except above,
+        # but keeping it as a fallback
+        logger.warning(f"Response from {endpoint} was not valid JSON: {response.text}")
+        return response.text
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Error getting authentication token for {endpoint}: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Network error when calling {endpoint}: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e

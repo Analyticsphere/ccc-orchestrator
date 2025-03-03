@@ -1,25 +1,31 @@
-from . import utils
-from . import constants
-import requests # type: ignore
-from google.cloud import bigquery # type: ignore
-from google.cloud.exceptions import NotFound # type: ignore
-import sys
+from google.cloud import bigquery  # type: ignore
+from google.cloud.exceptions import NotFound  # type: ignore
+
+from . import constants, utils
+
 
 def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Loading Parquet file gs://{file_path} to {project_id}.{dataset_id}")
-    response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/parquet_to_bq?file_path={file_path}&project_id={project_id}&dataset_id={dataset_id}",
-        headers=utils.get_auth_header()
+    
+    utils.make_api_call(
+        endpoint="parquet_to_bq",
+        json_data={
+            "file_path": file_path,
+            "project_id": project_id,
+            "dataset_id": dataset_id
+        }
     )
-    response.raise_for_status()
 
 def prep_dataset(project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Clearing dataset {project_id}.{dataset_id}")
-    response = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/clear_bq_dataset?project_id={project_id}&dataset_id={dataset_id}",
-        headers=utils.get_auth_header()
+    
+    utils.make_api_call(
+        endpoint="clear_bq_dataset",
+        json_data={
+            "project_id": project_id,
+            "dataset_id": dataset_id
+        }
     )
-    response.raise_for_status()
 
 def get_bq_log_row(site, date_to_check) -> list:
     client = bigquery.Client()
@@ -51,42 +57,64 @@ def get_bq_log_row(site, date_to_check) -> list:
         results = list(query_job.result())
         return results
     except Exception as e:
-        utils.logger.error(f"Unable to retrieve pipeline logs: {e}")
-        sys.exit(1)
+        utils.logger.error(f"Failed to retrieve BigQuery pipeline logs for site '{site}' and date '{date_to_check}': {e}")
+        raise Exception(f"Failed to retrieve BigQuery pipeline logs for site '{site}' and date '{date_to_check}': {e}") from e
 
 def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: str, run_id: str) -> None:
     status = constants.PIPELINE_START_STRING
 
-    reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&file_type={file_type}&omop_version={omop_version}&run_id={run_id}",
-        headers=utils.get_auth_header()
+    utils.make_api_call(
+        endpoint="pipeline_log",
+        json_data={
+            "logging_table": constants.PIPELINE_LOG_TABLE,
+            "site_name": site,
+            "delivery_date": delivery_date,
+            "status": status,
+            "file_type": file_type,
+            "omop_version": omop_version,
+            "run_id": run_id
+        }
     )
-    reponse.raise_for_status()
 
-def bq_log_running(site: str, delivery_date: str) -> None:
+def bq_log_running(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_RUNNING_STRING
 
-    reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
-        headers=utils.get_auth_header()
+    utils.make_api_call(
+        endpoint="pipeline_log",
+        json_data={
+            "logging_table": constants.PIPELINE_LOG_TABLE,
+            "site_name": site,
+            "delivery_date": delivery_date,
+            "status": status,
+            "run_id": run_id
+        }
     )
-    reponse.raise_for_status()
 
-def bq_log_error(run_id: str, message: str) -> None:
+def bq_log_error(site: str, delivery_date: str, run_id: str, message: str) -> None:
     status = constants.PIPELINE_ERROR_STRING
 
-    reponse = requests.get(
-        #f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}&message={message}",
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?status={status}&run_id={run_id}&message={message}",
-        headers=utils.get_auth_header()
+    utils.make_api_call(
+        endpoint="pipeline_log",
+        json_data={
+            "logging_table": constants.PIPELINE_LOG_TABLE,
+            "site_name": site,
+            "delivery_date": delivery_date,
+            "status": status,
+            "run_id": run_id,
+            "message": message
+        }
     )
-    reponse.raise_for_status()
 
-def bq_log_complete(site: str, delivery_date: str) -> None:
+def bq_log_complete(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_COMPLETE_STRING
 
-    reponse = requests.get(
-        f"{constants.PROCESSOR_ENDPOINT}/pipeline_log?site_name={site}&delivery_date={delivery_date}&status={status}",
-        headers=utils.get_auth_header()
+    utils.make_api_call(
+        endpoint="pipeline_log",
+        json_data={
+            "logging_table": constants.PIPELINE_LOG_TABLE,
+            "site_name": site,
+            "delivery_date": delivery_date,
+            "status": status,
+            "run_id": run_id
+        }
     )
-    reponse.raise_for_status()
