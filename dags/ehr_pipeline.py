@@ -113,7 +113,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
 
     return file_configs
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def process_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file.
@@ -133,7 +133,7 @@ def process_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specifications.
@@ -155,7 +155,7 @@ def validate_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def normalize_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure.
@@ -176,7 +176,7 @@ def normalize_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def cdm_upgrade(file_config: dict) -> None:
     """
     Upgrade CDM version (currently supports 5.3 -> 5.4)
@@ -226,7 +226,7 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
             bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
             raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table.
@@ -248,18 +248,17 @@ def load_to_bq(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=5, retries=0)
+@task(max_active_tis_per_dag=5)
 def derived_data_tables(site_to_process: tuple[str, str]) -> None:
     utils.logger.info("Executing derived data task")
 
     site, delivery_date = site_to_process
-    utils.logging.warning(f"site is {site} and delivery_date is {delivery_date}")
     try:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
 
         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-
+    
         for dervied_table in constants.DERIVED_DATA_TABLES:
             omop.create_derived_data_table(site, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
         
