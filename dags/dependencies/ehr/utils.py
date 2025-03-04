@@ -8,7 +8,7 @@ import requests  # type: ignore
 import yaml  # type: ignore
 from google.cloud import storage  # type: ignore
 
-from . import constants, file_config
+from dependencies.ehr import constants
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
@@ -151,7 +151,7 @@ def get_run_id(airflow_context) -> str:
 
     return run_id
 
-def get_file_path(file_config: file_config.FileConfig) -> str:
+def get_file_path(file_config: dict) -> str:
     file_path = (
         f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
         f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"

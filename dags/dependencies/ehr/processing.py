@@ -1,4 +1,4 @@
-from . import utils
+from dependencies.ehr import utils
 
 
 def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:

@@ -1,4 +1,4 @@
-from . import constants, utils
+from dependencies.ehr import constants, utils
 
 
 class FileConfig:
