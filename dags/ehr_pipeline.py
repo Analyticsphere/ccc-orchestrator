@@ -1,13 +1,13 @@
 from datetime import timedelta
 
 import airflow  # type: ignore
-import dependencies.bq as bq
-import dependencies.constants as constants
-import dependencies.file_config as file_config
-import dependencies.omop as omop
-import dependencies.processing as processing
-import dependencies.utils as utils
-import dependencies.validation as validation
+import dependencies.ehr.bq as bq
+import dependencies.ehr.constants as constants
+import dependencies.ehr.file_config as file_config
+import dependencies.ehr.omop as omop
+import dependencies.ehr.processing as processing
+import dependencies.ehr.utils as utils
+import dependencies.ehr.validation as validation
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.exceptions import AirflowException

@@ -1,4 +1,4 @@
-from . import utils
+from dependencies.ehr import utils
 
 
 def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_path: str) -> None:

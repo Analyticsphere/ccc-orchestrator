@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from . import constants, utils
+from dependencies.ehr import constants, utils
 
 def generate_report_json(site: str, delivery_date: str) -> dict:
     # Generate final data delivery report
