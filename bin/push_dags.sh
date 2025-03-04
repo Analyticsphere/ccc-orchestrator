@@ -5,14 +5,22 @@ set -e
 
 # Configure for dev environment
 PROJECT_ID="nih-nci-dceg-connect-dev"
-#COMPOSER_BUCKET="us-central1-ccc-jp-dev-54b9b374-bucket"
-COMPOSER_BUCKET="us-central1-ccc-pr2-jp-dev-bf0b32b4-bucket"
+
+# Determine COMPOSER_BUCKET from a command-line argument or environment variable.
+if [ -n "$1" ]; then
+    COMPOSER_BUCKET="$1"
+elif [ -n "$COMPOSER_BUCKET" ]; then
+    COMPOSER_BUCKET="$COMPOSER_BUCKET"
+else
+    echo "Error: COMPOSER_BUCKET not specified. Provide it as an argument or set the COMPOSER_BUCKET environment variable."
+    exit 1
+fi
 
 echo "Setting GCP project to: $PROJECT_ID"
 gcloud config set project "$PROJECT_ID"
 
-echo "Copying local DAGs to dev Composer bucket..."
+echo "Using Composer bucket: $COMPOSER_BUCKET"
+echo "Copying local DAGs to Composer bucket..."
 gsutil -m cp -r dags/* gs://"$COMPOSER_BUCKET"/dags/
 
-echo "Done. DAGs have been pushed to dev environment!"
- 
+echo "Done. DAGs have been pushed to the environment!"
