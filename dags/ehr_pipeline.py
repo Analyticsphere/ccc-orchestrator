@@ -330,7 +330,7 @@ with dag:
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
     
-    # Set task dependencies.ehr.
+    # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
     clean_bq >> load_file >> cleanup >> all_done
