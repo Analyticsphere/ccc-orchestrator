@@ -8,8 +8,7 @@ import requests  # type: ignore
 import yaml  # type: ignore
 from google.cloud import storage  # type: ignore
 
-import dependencies.ehr.constants as constants
-from dependencies.ehr.file_config import FileConfig
+import dependencies.ehr as constants, file_config
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
