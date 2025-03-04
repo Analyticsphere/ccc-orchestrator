@@ -1,7 +1,7 @@
 from enum import Enum
 
 # Main endpoint
-PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-1061430463455.us-central1.run.app"
+PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-eaf-1061430463455.us-central1.run.app"
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/config/site_config.yml"
 
@@ -16,6 +16,12 @@ TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
 VOCAB_REF_GCS_BUCKET = "ehr_pipeline_vocabulary_files"
 
 TARGET_CDM_VERSION = "5.4"
+
+CONDITION_ERA = "condition_era"
+DRUG_ERA = "drug_era"
+OBSERVATION_PERIOD = "observation_period"
+#DERIVED_DATA_TABLES: list = [CONDITION_ERA, DRUG_ERA, OBSERVATION_PERIOD]
+DERIVED_DATA_TABLES: list = [CONDITION_ERA, DRUG_ERA]
 
 CSV = ".csv"
 PARQUET = ".parquet"

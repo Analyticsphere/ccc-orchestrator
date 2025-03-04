@@ -2,11 +2,11 @@ from . import constants, utils
 
 
 class FileConfig:
-    def __init__(self, site: str, file_name: str):
+    def __init__(self, site: str, delivery_date: str, file_name: str):
         self.site = site
         self.site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
         self.file_name = utils.remove_date_prefix(file_name)
-        self.delivery_date = utils.get_date_prefix(file_name)
+        self.delivery_date = delivery_date #utils.get_date_prefix(file_name)
         self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
         self.gcs_path = self.site_config[constants.FileConfig.GCS_PATH.value]
         self.file_delivery_format = self.site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]

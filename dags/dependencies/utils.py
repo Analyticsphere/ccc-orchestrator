@@ -98,12 +98,12 @@ def remove_date_prefix(file_name: str) -> str:
     """
     return file_name.split('/')[-1]
 
-def get_date_prefix(file_name: str) -> str:
-    """
-    Extracts date prefix from files in format YYYY-MM-DD/file_name.csv
-    Returns the YYYY-MM-DD portion
-    """
-    return file_name.split('/')[0]
+# def get_date_prefix(file_name: str) -> str:
+#     """
+#     Extracts date prefix from files in format YYYY-MM-DD/file_name.csv
+#     Returns the YYYY-MM-DD portion
+#     """
+#     return file_name.split('/')[0]
 
 def get_most_recent_folder(site: str) -> str:
     """
