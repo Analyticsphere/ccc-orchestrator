@@ -8,7 +8,6 @@ import dependencies.ehr.omop as omop
 import dependencies.ehr.processing as processing
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
-
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.exceptions import AirflowException
@@ -104,7 +103,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
             files = processing.get_file_list(site, delivery_date, site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value])
 
             for file in files:
-                file_config_obj = file_config.FileConfig(site, file)
+                file_config_obj = file_config.FileConfig(site, delivery_date, file)
                 file_configs.append(file_config_obj.to_dict())
         except Exception as e:
             error_msg = f"Unable to get file list: {str(e)}"
@@ -114,7 +113,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
 
     return file_configs
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def process_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file.
@@ -134,7 +133,7 @@ def process_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specifications.
@@ -156,7 +155,7 @@ def validate_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def normalize_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure.
@@ -177,7 +176,7 @@ def normalize_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def cdm_upgrade(file_config: dict) -> None:
     """
     Upgrade CDM version (currently supports 5.3 -> 5.4)
@@ -227,7 +226,7 @@ def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
             bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
             raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=10, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
 def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table.
@@ -246,6 +245,25 @@ def load_to_bq(file_config: dict) -> None:
     except Exception as e:
         error_msg = f"Unable to write to BigQuery: {e}"
         utils.logger.error(error_msg)
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+
+@task(max_active_tis_per_dag=5)
+def derived_data_tables(site_to_process: tuple[str, str]) -> None:
+    utils.logger.info("Executing derived data task")
+
+    site, delivery_date = site_to_process
+    try:
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
+
+        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+    
+        for dervied_table in constants.DERIVED_DATA_TABLES:
+            omop.create_derived_data_table(site, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
+        
+    except Exception as e:
+        error_msg = f"Unable to write to BigQuery: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
@@ -325,6 +343,7 @@ with dag:
     
     clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
+    derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
 
     # Final log_done task runs regardless of task outcomes.
@@ -333,5 +352,5 @@ with dag:
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
-    clean_bq >> load_file >> cleanup >> all_done
+    clean_bq >> load_file >> derived_data >> cleanup >> all_done
 

@@ -62,6 +62,22 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
         }
     )
 
+def create_derived_data_table(site: str, delivery_date: str, table_name: str, project_id: str, dataset_id: str, vocab_version: str, vocab_gcs_bucket: str) -> None:
+    utils.logger.info(f"Generating derived data table {table_name} for {delivery_date} delivery from {site}")
+
+    utils.make_api_call(
+        endpoint="populate_derived_data",
+        json_data={
+            "site": site,
+            "delivery_date": delivery_date,
+            "table_name": table_name,
+            "project_id": project_id,
+            "dataset_id": dataset_id,
+            "vocab_version": vocab_version,
+            "vocab_gcs_bucket": vocab_gcs_bucket
+        }
+    )
+
 def populate_cdm_source(cdm_source_data: dict) -> None:
     utils.logger.info(f"If empty, populating cdm_source table for {cdm_source_data['source_release_date']} delivery from {cdm_source_data['cdm_source_abbreviation']}")
     

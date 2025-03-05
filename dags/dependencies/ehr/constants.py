@@ -17,6 +17,11 @@ VOCAB_REF_GCS_BUCKET = "ehr_pipeline_vocabulary_files"
 
 TARGET_CDM_VERSION = "5.4"
 
+CONDITION_ERA = "condition_era"
+DRUG_ERA = "drug_era"
+OBSERVATION_PERIOD = "observation_period"
+DERIVED_DATA_TABLES: list = [CONDITION_ERA, DRUG_ERA, OBSERVATION_PERIOD]
+
 CSV = ".csv"
 PARQUET = ".parquet"
 
