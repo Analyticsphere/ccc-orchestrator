@@ -258,9 +258,10 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
 
         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
     
         for dervied_table in constants.DERIVED_DATA_TABLES:
-            omop.create_derived_data_table(site, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
+            omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
         
     except Exception as e:
         error_msg = f"Unable to write to BigQuery: {e}"
