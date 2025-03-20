@@ -14,6 +14,8 @@ from airflow.exceptions import AirflowException
 from airflow.operators.python import get_current_context  # type: ignore
 from airflow.utils.dates import days_ago  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule
+from airflow.exceptions import AirflowSkipException  # type: ignore
+
 
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),
@@ -113,7 +115,7 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
 
     return file_configs
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
 def process_file(file_config: dict) -> None:
     """
     Create optimized version of incoming EHR data file.
@@ -133,7 +135,7 @@ def process_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24)
 def validate_file(file_config: dict) -> None:
     """
     Validate file against OMOP CDM specifications.
@@ -155,7 +157,7 @@ def validate_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
 def normalize_file(file_config: dict) -> None:
     """
     Standardize OMOP data file structure.
@@ -176,7 +178,7 @@ def normalize_file(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24)
 def cdm_upgrade(file_config: dict) -> None:
     """
     Upgrade CDM version (currently supports 5.3 -> 5.4)
@@ -203,30 +205,57 @@ def cdm_upgrade(file_config: dict) -> None:
         utils.logger.error(error_msg)
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
-    
-@task
-def prepare_bq(sites_to_process: list[tuple[str, str]]) -> None:
+
+@task(max_active_tis_per_dag=10)
+def prepare_bq(site_to_process: tuple[str, str]) -> None:
     """
     Deletes files and tables from previous pipeline runs.
     """    
-    for site_to_process in sites_to_process:
+    site, delivery_date = site_to_process
+    try:
+        bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
+
+        site_config = utils.get_site_config_file()
+        project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+
+        # Delete all tables within the BigQuery dataset.
+        bq.prep_dataset(project_id, dataset_id)
+    except Exception as e:
+        error_msg = f"Unable to prepare BigQuery: {e}"
+        utils.logger.error(error_msg)
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+
+@task(max_active_tis_per_dag=10)
+def load_target_vocab(site_to_process: tuple[str, str]) -> None:
+    """
+    Load all target vocabulary tables to BigQuery
+    If constants.LOAD_ONLY_TARGET_VOCAB is False, the site's vocab tables will overwrite default tables loaded by this task
+    """
+
+    site, delivery_date = site_to_process
+
+    site_config = utils.get_site_config_file()
+    project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
+    dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+    
+    for vocab_table in constants.VOCABULARY_TABLES:
         try:
-            site, delivery_date = site_to_process
-            bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
-
-            site_config = utils.get_site_config_file()
-            project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
-            dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
-
-            # Delete all tables within the BigQuery dataset.
-            bq.prep_dataset(project_id, dataset_id)
+            omop.load_vocabulary_table_gcs_to_bq(
+                constants.TARGET_VOCAB_VERSION, 
+                constants.VOCAB_REF_GCS_BUCKET,
+                vocab_table,
+                project_id,
+                dataset_id
+                )
         except Exception as e:
-            error_msg = f"Unable to prepare BigQuery: {e}"
+            error_msg = f"Unable to write to BigQuery: {e}"
             utils.logger.error(error_msg)
             bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
-            raise Exception(error_msg) from e
+            raise Exception(error_msg) from e                
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed")
 def load_to_bq(file_config: dict) -> None:
     """
     Load OMOP data file to BigQuery table.
@@ -241,16 +270,23 @@ def load_to_bq(file_config: dict) -> None:
         project_id = f"{file_config[constants.FileConfig.PROJECT_ID.value]}"
         dataset_id = f"{file_config[constants.FileConfig.BQ_DATASET.value]}"
 
-        bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
+        file_name = file_config[constants.FileConfig.FILE_NAME.value].rsplit('.', 1)[0]
+        if constants.LOAD_ONLY_TARGET_VOCAB and file_name in constants.VOCABULARY_TABLES:
+            utils.logger.info(f"Skip loading site-provided vocabulary file {file_name} to BigQuery")
+            raise AirflowSkipException
+        else:
+            bq.load_parquet_to_bq(gcs_file_path, project_id, dataset_id)
+    except AirflowException:
+        # Re-raise the skip exception without logging it as an error
+        raise
     except Exception as e:
         error_msg = f"Unable to write to BigQuery: {e}"
         utils.logger.error(error_msg)
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task(max_active_tis_per_dag=5)
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 def derived_data_tables(site_to_process: tuple[str, str]) -> None:
-    utils.logger.info("Executing derived data task")
 
     site, delivery_date = site_to_process
     try:
@@ -268,7 +304,7 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
 
-@task
+@task(trigger_rule="none_failed")
 def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     """
     Perform final data cleanup here.
@@ -342,7 +378,10 @@ with dag:
     fix_data_file = normalize_file.expand(file_config=file_list)
     upgrade_file = cdm_upgrade.expand(file_config=file_list)
     
-    clean_bq = prepare_bq(sites_to_process=unprocessed_sites)
+    # Remove all tables before loading new data
+    clean_bq = prepare_bq.expand(site_to_process=unprocessed_sites)
+    
+    load_vocab = load_target_vocab.expand(site_to_process=unprocessed_sites)
     load_file = load_to_bq.expand(file_config=file_list)
     derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
@@ -353,5 +392,4 @@ with dag:
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
-    clean_bq >> load_file >> derived_data >> cleanup >> all_done
-
+    clean_bq >> load_vocab >> load_file >> derived_data >> cleanup >> all_done

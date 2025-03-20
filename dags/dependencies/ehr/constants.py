@@ -1,7 +1,7 @@
 from enum import Enum
 
 # Main endpoint
-PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-1061430463455.us-central1.run.app"
+PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-eaf-1061430463455.us-central1.run.app"
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
@@ -12,15 +12,28 @@ PIPELINE_COMPLETE_STRING = "completed"
 PIPELINE_ERROR_STRING = "error"
 PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 
+# When True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
+LOAD_ONLY_TARGET_VOCAB = True
 TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
 VOCAB_REF_GCS_BUCKET = "ehr_pipeline_vocabulary_files"
+VOCABULARY_TABLES = [
+    "concept",
+    "concept_ancestor",
+    "concept_class",
+    "concept_relationship",
+    "concept_synonym",
+    "domain",
+    "drug_strength",
+    "relationship",
+    "vocabulary"
+]
 
 TARGET_CDM_VERSION = "5.4"
 
 CONDITION_ERA = "condition_era"
 DRUG_ERA = "drug_era"
 OBSERVATION_PERIOD = "observation_period"
-DERIVED_DATA_TABLES: list = [CONDITION_ERA, DRUG_ERA, OBSERVATION_PERIOD]
+DERIVED_DATA_TABLES: list = [DRUG_ERA, CONDITION_ERA, OBSERVATION_PERIOD]
 
 CSV = ".csv"
 PARQUET = ".parquet"
@@ -40,8 +53,9 @@ class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"
     FIXED_FILES = f"{ARTIFACTS}fixed_files/"
     CONVERTED_FILES = f"{ARTIFACTS}converted_files/"
+    CREATED_FILES = f"{ARTIFACTS}created_files/"
     REPORT = f"{ARTIFACTS}delivery_report/"
     REPORT_TMP = f"{ARTIFACTS}delivery_report/tmp/"
     DQD = f"{ARTIFACTS}dqd/"
+    ACHILLES = f"{ARTIFACTS}achilles/"
     INVALID_ROWS = f"{ARTIFACTS}invalid_rows/"
-
