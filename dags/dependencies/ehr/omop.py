@@ -86,3 +86,16 @@ def populate_cdm_source(cdm_source_data: dict) -> None:
         endpoint="populate_cdm_source",
         json_data=cdm_source_data
     )
+
+def load_vocabulary_table_gcs_to_bq(vocab_version: str, vocab_gcs_bucket: str, table_file_name: str, project_id: str, dataset_id: str) -> None:
+    utils.logger.info(f"Loading {table_file_name} vocabulary table to {project_id}.{dataset_id}")
+    utils.make_api_call(
+        endpoint="load_target_vocab",
+        json_data={
+            "vocab_version": vocab_version,
+            "vocab_gcs_bucket": vocab_gcs_bucket,
+            "table_file_name": table_file_name,
+            "project_id": project_id,
+            "dataset_id": dataset_id,            
+        }
+    )
