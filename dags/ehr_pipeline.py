@@ -38,7 +38,7 @@ def check_api_health() -> None:
     """
     utils.logger.info("Checking OMOP file processor API status")
     try:
-        result = utils.check_service_health(constants.PROCESSOR_ENDPOINT)
+        result = utils.check_service_health(constants.PROCESSOR_URL)
         if result['status'] != 'healthy':
             error_msg = f"API health check failed. Status: {result['status']}"
             utils.logger.error(error_msg)
