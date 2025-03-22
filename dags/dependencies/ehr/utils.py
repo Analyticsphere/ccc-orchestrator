@@ -161,21 +161,23 @@ def make_api_call(url: str, endpoint: str, method: str = "post",
     Makes an API call to the processor endpoint with standardized error handling.
     """
 
+    complete_url = f"{url}/{endpoint}"
+
     # pipeline_log calls are made often and clutter the logs, don't display this message
     if endpoint != "pipeline_log":
-        logger.info(f"Making {method.upper()} request to {url}")
+        logger.info(f"Making {method.upper()} request to {complete_url}")
     
     try:
         if method.lower() == "get":
             response = requests.get(
-                url,
+                complete_url,
                 headers=get_auth_header(),
                 params=params,
                 timeout=timeout
             )
         else:  # POST
             response = requests.post(
-                url,
+                complete_url,
                 headers=get_auth_header(),
                 json=json_data,
                 timeout=timeout
