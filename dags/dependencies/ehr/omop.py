@@ -43,6 +43,7 @@ def create_optimized_vocab(vocab_version: str, vocab_gcs_bucket: str) -> None:
     utils.logger.info(f"Creating optimized version of {vocab_version} if required")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="create_optimized_vocab",
         json_data={
             "vocab_version": vocab_version,
@@ -54,6 +55,7 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
     utils.logger.info(f"Creating any missing OMOP tables in {project_id}.{dataset_id}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="create_missing_tables",
         json_data={
             "omop_version": omop_version,
@@ -66,6 +68,7 @@ def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, ta
     utils.logger.info(f"Generating derived data table {table_name} for {delivery_date} delivery from {site}")
 
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="populate_derived_data",
         json_data={
             "site": site,
@@ -83,6 +86,7 @@ def populate_cdm_source(cdm_source_data: dict) -> None:
     utils.logger.info(f"If empty, populating cdm_source table for {cdm_source_data['source_release_date']} delivery from {cdm_source_data['cdm_source_abbreviation']}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="populate_cdm_source",
         json_data=cdm_source_data
     )
@@ -90,6 +94,7 @@ def populate_cdm_source(cdm_source_data: dict) -> None:
 def load_vocabulary_table_gcs_to_bq(vocab_version: str, vocab_gcs_bucket: str, table_file_name: str, project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Loading {table_file_name} vocabulary table to {project_id}.{dataset_id}")
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="load_target_vocab",
         json_data={
             "vocab_version": vocab_version,
