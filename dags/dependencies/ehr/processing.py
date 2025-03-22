@@ -14,7 +14,7 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
 
         response = utils.make_api_call(
-            url = constants.PROCESSOR_ENDPOINT,
+            url = constants.PROCESSOR_URL,
             endpoint="get_file_list",
             method="get",
             params={
@@ -39,7 +39,7 @@ def create_artifact_buckets(parent_bucket: str) -> None:
     utils.logger.info(f"Creating artifact bucket in {parent_bucket}")
     
     utils.make_api_call(
-        url = constants.PROCESSOR_ENDPOINT,
+        url = constants.PROCESSOR_URL,
         endpoint="create_artifact_buckets",
         json_data={"parent_bucket": parent_bucket}
     )
@@ -51,7 +51,7 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
     utils.logger.info(f"Processing incoming {file_type} file gs://{gcs_file_path}")
     
     utils.make_api_call(
-        url = constants.PROCESSOR_ENDPOINT,
+        url = constants.PROCESSOR_URL,
         endpoint="process_incoming_file",
         json_data={
             "file_type": file_type,
@@ -67,7 +67,7 @@ def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
     utils.logger.info(f"Normalizing Parquet file gs://{file_path}")
     
     utils.make_api_call(
-        url = constants.PROCESSOR_ENDPOINT,
+        url = constants.PROCESSOR_URL,
         endpoint="normalize_parquet",
         json_data={
             "file_path": file_path,
@@ -82,7 +82,7 @@ def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> No
     utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
     
     utils.make_api_call(
-        url = constants.PROCESSOR_ENDPOINT,
+        url = constants.PROCESSOR_URL,
         endpoint="upgrade_cdm",
         json_data={
             "file_path": file_path,
