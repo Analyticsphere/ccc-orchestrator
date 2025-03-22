@@ -153,14 +153,13 @@ def get_file_path(file_config: dict) -> str:
 
     return file_path
 
-def make_api_call(endpoint: str, method: str = "post", 
+def make_api_call(url: str, endpoint: str, method: str = "post", 
                  params: Optional[Dict[str, str]] = None, 
                  json_data: Optional[Dict[str, Any]] = None, 
                  timeout: Optional[tuple] = None) -> Optional[Any]:
     """
     Makes an API call to the processor endpoint with standardized error handling.
     """
-    url = f"{constants.PROCESSOR_ENDPOINT}/{endpoint}"
 
     # pipeline_log calls are made often and clutter the logs, don't display this message
     if endpoint != "pipeline_log":
