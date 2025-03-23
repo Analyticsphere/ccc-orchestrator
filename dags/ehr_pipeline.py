@@ -341,8 +341,6 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
             raise Exception(error_msg) from e
 
-#####################################################################################################
-# TODO Add tasks for run_dqd and run_achilles using this example
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 def run_dqd(site_to_process: tuple[str, str]) -> None:
 
@@ -386,7 +384,6 @@ def run_achilles(site_to_process: tuple[str, str]) -> None:
         error_msg = f"Unable to run Achilles: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
-#####################################################################################################
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
 def log_done() -> None:
