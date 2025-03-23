@@ -378,10 +378,10 @@ def run_achilles(site_to_process: tuple[str, str]) -> None:
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
         artifact_path = constants.ArtifactPaths.DQD.value
-        gcs_artifact_path = os.path.join(gcs_bucket, artifact_path, gcs_artifact_path=gcs_artifact_path)
+        gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
 
         # TODO pass gcs_artifact_path to run_achilles endpoint
-        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id)
+        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path)
     except Exception as e:
         error_msg = f"Unable to run Achilles: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
@@ -435,10 +435,15 @@ with dag:
     derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
 
+    # Hades Analytics
+    run_dqd = run_dqd.expand(sites_to_process=unprocessed_sites)
+    # TODO task to load DQD results to BQ
+    run_achilles = run_achilles.expand(sites_to_process=unprocessed_sites)
+
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
     
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
-    clean_bq >> load_vocab >> load_file >> derived_data >> cleanup >> all_done
+    clean_bq >> load_vocab >> load_file >> derived_data >> cleanup >> run_dqd >> run_achilles >> all_done
