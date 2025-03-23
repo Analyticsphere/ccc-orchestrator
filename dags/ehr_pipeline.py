@@ -433,9 +433,9 @@ with dag:
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
 
     # Hades Analytics
-    run_dqd = run_dqd.expand(sites_to_process=unprocessed_sites)
+    run_dqd = run_dqd.expand(site_to_process=unprocessed_sites)
     # TODO task to load DQD results to BQ
-    run_achilles = run_achilles.expand(sites_to_process=unprocessed_sites)
+    run_achilles = run_achilles.expand(site_to_process=unprocessed_sites)
 
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
