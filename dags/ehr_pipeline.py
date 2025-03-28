@@ -351,13 +351,14 @@ def run_dqd(site_to_process: tuple[str, str]) -> None:
         utils.logger.info(f"Triggering DQD checks for {site} data delivered on {delivery_date}")
 
         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        dataset_id = utils.get_site_config_file(c)[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
         artifact_path = constants.ArtifactPaths.DQD.value
         gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
+        cdm_version = constants.TARGET_CDM_VERSION
 
         # TODO pass gcs_artifact_path to run_dqd endpoint
-        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path)
+        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path,cdm_version=cdm_version)
     except Exception as e:
         error_msg = f"Unable to run DQD: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))

@@ -2,7 +2,7 @@
 from dependencies.ehr import utils
 from dependencies.ehr import constants
 
-def run_dqd(project_id: str, dataset_id: str, gcs_artifact_path: str) -> None:
+def run_dqd(project_id: str, dataset_id: str, gcs_artifact_path: str, cdm_version: str) -> None:
     utils.logger.info(f"Running dqd_checks for {project_id}.{dataset_id}")
     utils.make_api_call(
         url = constants.ANALAYZER_URL,
