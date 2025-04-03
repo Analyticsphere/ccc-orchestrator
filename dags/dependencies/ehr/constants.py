@@ -62,18 +62,6 @@ class FileConfig(str, Enum):
     FILE_PATH = "file_path"
     TABLE_NAME = "table_name"
 
-class TransformConfig(str, Enum):
-    SITE = "site"
-    FILE_PATH = "file_path"
-    DELIVERY_DATE = "delivery_date"
-    PROJECT_ID = "project_id"
-    GCS_BUCKET = "gcs_bucket"
-    BQ_DATASET = "bq_dataset"
-    SOURCE_FILE = "source_file"
-    TARGET_FILE = "target_file"
-    OMOP_VERSION = "omop_version"
-    TABLE_NAME = "table_name"
-
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"
     FIXED_FILES = f"{ARTIFACTS}fixed_files/"
