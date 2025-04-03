@@ -419,4 +419,4 @@ with dag:
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
-    clean_bq >> vocab_harmonization >> derived_data >> load_vocab >> load_file >> cleanup >> all_done
+    clean_bq >> vocab_harmonization >> load_vocab >> load_file >> derived_data >> cleanup >> all_done
