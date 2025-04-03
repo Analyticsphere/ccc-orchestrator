@@ -218,8 +218,8 @@ def harmonize_vocab(file_config: dict) -> None:
             utils.logger.info(f"Skip harmonizing vocabulary of file {table_name}")
             raise AirflowSkipException
         else:
-            project_id = utils.get_site_config_file()[constants.TransformConfig.SITE.value][site][constants.TransformConfig.PROJECT_ID.value]
-            dataset_id = utils.get_site_config_file()[constants.TransformConfig.SITE.value][site][constants.TransformConfig.BQ_DATASET.value]
+            project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+            dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
             vocab.harmonize(constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET, constants.TARGET_CDM_VERSION, file_path, site, project_id, dataset_id)
     except AirflowException:
         # Re-raise the skip exception without logging it as an error
