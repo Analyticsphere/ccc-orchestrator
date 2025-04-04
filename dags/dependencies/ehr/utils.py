@@ -6,9 +6,8 @@ from typing import Any, Dict, Optional
 
 import requests  # type: ignore
 import yaml  # type: ignore
-from google.cloud import storage  # type: ignore
-
 from dependencies.ehr import constants, file_config
+from google.cloud import storage  # type: ignore
 
 """
 Set up a logging instance that will write to stdout (and therefore show up in Google Cloud logs)
@@ -68,7 +67,7 @@ def get_site_bucket(site: str) -> str:
     """
     Return the parent GCS bucket for a given site
     """
-    return get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
+    return get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
 
 def get_site_config_file() -> dict:
     """
@@ -91,12 +90,6 @@ def get_site_list() -> list[str]:
     sites = list(config[constants.FileConfig.SITE.value].keys()) 
 
     return sites
-
-def remove_date_prefix(file_name: str) -> str:
-    """
-    Removes date prefix from files pulled from EHR OMOP GCS buckets in format YYYY-MM-DD/file_name.csv
-    """
-    return file_name.split('/')[-1]
 
 def get_most_recent_folder(site: str) -> str:
     """
@@ -146,9 +139,9 @@ def get_run_id(airflow_context) -> str:
 
 def get_file_path(file_config: dict) -> str:
     file_path = (
-        f"{file_config[constants.FileConfig.GCS_PATH.value]}/"
+        f"{file_config[constants.FileConfig.GCS_BUCKET.value]}/"
         f"{file_config[constants.FileConfig.DELIVERY_DATE.value]}/"
-        f"{file_config[constants.FileConfig.FILE_NAME.value]}"
+        f"{file_config[constants.FileConfig.SOURCE_FILE.value]}"
     )
 
     return file_path
@@ -188,6 +181,8 @@ def make_api_call(url: str, endpoint: str, method: str = "post",
             error_message = f"API Error {response.status_code} from {endpoint}: {response.text}"
             logger.error(error_message)
             raise Exception(error_message)
+        else:
+            logger.info(f"API call to {endpoint} successful: {response.text}")
         
         # Try to parse as JSON, but handle non-JSON responses
         if response.content:

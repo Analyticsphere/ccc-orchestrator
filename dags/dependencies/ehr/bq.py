@@ -1,10 +1,9 @@
+from dependencies.ehr import constants, utils
 from google.cloud import bigquery  # type: ignore
 from google.cloud.exceptions import NotFound  # type: ignore
 
-from dependencies.ehr import constants, utils
 
-
-def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str) -> None:
+def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str, table_name: str, write_type: constants.BQWriteTypes) -> None:
     utils.logger.info(f"Loading Parquet file gs://{file_path} to {project_id}.{dataset_id}")
     
     utils.make_api_call(
@@ -13,7 +12,9 @@ def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str) -> None
         json_data={
             "file_path": file_path,
             "project_id": project_id,
-            "dataset_id": dataset_id
+            "dataset_id": dataset_id,
+            "table_name": table_name,
+            "write_type": write_type
         }
     )
 

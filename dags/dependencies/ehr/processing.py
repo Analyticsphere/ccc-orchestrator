@@ -32,16 +32,16 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
         utils.logger.error(f"Error getting file list: {e}")
         raise Exception(f"Error getting file list: {e}") from e
 
-def create_artifact_buckets(parent_bucket: str) -> None:
+def create_artifact_buckets(delivery_bucket: str) -> None:
     """
     Create artifact buckets in the parent bucket for storing processing artifacts
     """
-    utils.logger.info(f"Creating artifact bucket in {parent_bucket}")
+    utils.logger.info(f"Creating artifact buckets in {delivery_bucket}")
     
     utils.make_api_call(
         url = constants.PROCESSOR_URL,
         endpoint="create_artifact_buckets",
-        json_data={"parent_bucket": parent_bucket}
+        json_data={"delivery_bucket": delivery_bucket}
     )
 
 def process_file(file_type: str, gcs_file_path: str) -> None:
@@ -56,8 +56,7 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
         json_data={
             "file_type": file_type,
             "file_path": gcs_file_path
-        },
-        timeout=(10, 600)  # Long timeout for large file conversions
+        }
     )
 
 def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
@@ -75,18 +74,3 @@ def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
         }
     )
 
-def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> None:
-    """
-    Upgrade CDM version of the file (e.g., from 5.3 to 5.4)
-    """
-    utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
-    
-    utils.make_api_call(
-        url = constants.PROCESSOR_URL,
-        endpoint="upgrade_cdm",
-        json_data={
-            "file_path": file_path,
-            "omop_version": cdm_version,
-            "target_omop_version": target_cdm_version
-        }
-    )

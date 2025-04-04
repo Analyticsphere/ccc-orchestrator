@@ -2,6 +2,7 @@ from datetime import datetime
 
 from dependencies.ehr import constants, utils
 
+
 def generate_report_json(site: str, delivery_date: str) -> dict:
     # Generate final data delivery report
     report_data = {
@@ -38,18 +39,6 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
     }
 
     return cdm_source
-
-def create_optimized_vocab(vocab_version: str, vocab_gcs_bucket: str) -> None:
-    utils.logger.info(f"Creating optimized version of {vocab_version} if required")
-    
-    utils.make_api_call(
-        url = constants.PROCESSOR_URL,
-        endpoint="create_optimized_vocab",
-        json_data={
-            "vocab_version": vocab_version,
-            "vocab_gcs_bucket": vocab_gcs_bucket
-        }
-    )
 
 def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: str) -> None:
     utils.logger.info(f"Creating any missing OMOP tables in {project_id}.{dataset_id}")
@@ -91,16 +80,18 @@ def populate_cdm_source(cdm_source_data: dict) -> None:
         json_data=cdm_source_data
     )
 
-def load_vocabulary_table_gcs_to_bq(vocab_version: str, vocab_gcs_bucket: str, table_file_name: str, project_id: str, dataset_id: str) -> None:
-    utils.logger.info(f"Loading {table_file_name} vocabulary table to {project_id}.{dataset_id}")
+def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> None:
+    """
+    Upgrade CDM version of the file (e.g., from 5.3 to 5.4)
+    """
+    utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
+
     utils.make_api_call(
         url = constants.PROCESSOR_URL,
-        endpoint="load_target_vocab",
+        endpoint="upgrade_cdm",
         json_data={
-            "vocab_version": vocab_version,
-            "vocab_gcs_bucket": vocab_gcs_bucket,
-            "table_file_name": table_file_name,
-            "project_id": project_id,
-            "dataset_id": dataset_id,            
+            "file_path": file_path,
+            "omop_version": cdm_version,
+            "target_omop_version": target_cdm_version
         }
     )
