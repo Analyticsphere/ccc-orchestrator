@@ -7,6 +7,7 @@ def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str, table_n
     utils.logger.info(f"Loading Parquet file gs://{file_path} to {project_id}.{dataset_id}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="parquet_to_bq",
         json_data={
             "file_path": file_path,
@@ -21,6 +22,7 @@ def prep_dataset(project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Clearing dataset {project_id}.{dataset_id}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="clear_bq_dataset",
         json_data={
             "project_id": project_id,
@@ -65,6 +67,7 @@ def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: st
     status = constants.PIPELINE_START_STRING
 
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="pipeline_log",
         json_data={
             "logging_table": constants.PIPELINE_LOG_TABLE,
@@ -81,6 +84,7 @@ def bq_log_running(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_RUNNING_STRING
 
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="pipeline_log",
         json_data={
             "logging_table": constants.PIPELINE_LOG_TABLE,
@@ -95,6 +99,7 @@ def bq_log_error(site: str, delivery_date: str, run_id: str, message: str) -> No
     status = constants.PIPELINE_ERROR_STRING
 
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="pipeline_log",
         json_data={
             "logging_table": constants.PIPELINE_LOG_TABLE,
@@ -110,6 +115,7 @@ def bq_log_complete(site: str, delivery_date: str, run_id: str) -> None:
     status = constants.PIPELINE_COMPLETE_STRING
 
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="pipeline_log",
         json_data={
             "logging_table": constants.PIPELINE_LOG_TABLE,

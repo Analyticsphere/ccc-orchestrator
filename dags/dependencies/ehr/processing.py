@@ -1,4 +1,5 @@
 from dependencies.ehr import utils
+from dependencies.ehr import constants
 
 
 def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
@@ -13,6 +14,7 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
 
         response = utils.make_api_call(
+            url = constants.PROCESSOR_URL,
             endpoint="get_file_list",
             method="get",
             params={
@@ -37,6 +39,7 @@ def create_artifact_buckets(delivery_bucket: str) -> None:
     utils.logger.info(f"Creating artifact buckets in {delivery_bucket}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="create_artifact_buckets",
         json_data={"delivery_bucket": delivery_bucket}
     )
@@ -48,6 +51,7 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
     utils.logger.info(f"Processing incoming {file_type} file gs://{gcs_file_path}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="process_incoming_file",
         json_data={
             "file_type": file_type,
@@ -62,6 +66,7 @@ def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
     utils.logger.info(f"Normalizing Parquet file gs://{file_path}")
     
     utils.make_api_call(
+        url = constants.PROCESSOR_URL,
         endpoint="normalize_parquet",
         json_data={
             "file_path": file_path,
