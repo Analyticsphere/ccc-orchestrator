@@ -4,7 +4,8 @@
 set -e
 
 # Configure for dev environment
-PROJECT_ID="nih-nci-dceg-connect-dev"
+# 'nih-nci-dceg-connect-prod-6d04'
+PROJECT_ID='nih-nci-dceg-connect-prod-6d04'
 
 # Determine COMPOSER_BUCKET from a command-line argument or environment variable.
 if [ -n "$1" ]; then

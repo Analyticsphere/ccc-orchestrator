@@ -1,17 +1,41 @@
 site:
-  'synthea_53':
-    display_name: 'Synthea Synthetic Data'
-    gcs_path: 'synthea_cdm53'
+  'marshfield':
+    display_name: 'Marshfield EHR data'
+    gcs_bucket: 'ehr_marshfield'
     file_delivery_format: '.csv'
-    project_id: 'nih-nci-dceg-connect-dev'
-    bq_dataset: 'synthea_cdm53'
+    project_id: 'nih-nci-dceg-connect-prod-6d04'
+    bq_dataset: 'ehr_marshfield'
     omop_version: '5.3'
-    post_processing: ['cdm_upgrade', 'henry_ford_fix']
-  'synthea_54':
-    display_name: 'Synthea Synthetic Data'
-    gcs_path: 'synthea_cdm54'
+    post_processing: ['']
+  'healthpartners':
+    display_name: 'Health Partners EHR data'
+    gcs_bucket: 'ehr_healthpartners'
     file_delivery_format: '.csv'
-    project_id: 'nih-nci-dceg-connect-dev'
-    bq_dataset: 'synthea_cdm54'
-    omop_version: '5.4'
-    post_processing: ['cdm_upgrade']
+    project_id: 'nih-nci-dceg-connect-prod-6d04'
+    bq_dataset: 'ehr_healthpartners'
+    omop_version: '5.3'
+    post_processing: ['']
+  'henry_ford':
+    display_name: 'Henry Ford Health EHR data'
+    gcs_bucket: 'ehr_henry_ford'
+    file_delivery_format: '.csv'
+    project_id: 'nih-nci-dceg-connect-prod-6d04'
+    bq_dataset: 'ehr_henry_ford'
+    omop_version: '5.3'
+    post_processing: ['']
+  'sanford':
+    display_name: 'Sanford EHR data'
+    gcs_bucket: 'ehr_sanford'
+    file_delivery_format: '.parquet'
+    project_id: 'nih-nci-dceg-connect-prod-6d04'
+    bq_dataset: 'ehr_sanford'
+    omop_version: '5.3'
+    post_processing: ['']
+  'uchicago':
+    display_name: 'University of Chicago EHR data'
+    gcs_bucket: 'ehr_uchicago'
+    file_delivery_format: '.csv'
+    project_id: 'nih-nci-dceg-connect-prod-6d04'
+    bq_dataset: 'ehr_uchicago'
+    omop_version: '5.3'
+    post_processing: ['']
