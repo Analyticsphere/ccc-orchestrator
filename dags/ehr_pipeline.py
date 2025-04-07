@@ -373,7 +373,7 @@ def run_dqd(site_to_process: tuple[str, str]) -> None:
 
         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-        gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
+        gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
         cdm_source_name = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]['display_name']
         artifact_path = constants.ArtifactPaths.DQD.value
         gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
@@ -475,4 +475,24 @@ with dag:
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
     clean_bq >> vocab_harmonization >> load_vocab >> load_file >> derived_data >> cleanup >> run_dqd >> run_achilles >> all_done
 
+
+# TODO Pseudocode
+
+# def get_analysis_list(sites_to_process):
+#     l = list()
+#     for each site, delivery_date in sites_to_process:
+#       for each rlang_task:
+#           l.append((site, delivery_date, name_of_task)) 
+#     return(list)
+ 
+# # pass this list to a second task
+# def perform_analysis(analysis_config: tuple)
+#   site, delivery_date, name_of_task = analysis_config
+#       call_api_endpoint_for_task
+
+# with dag:
+#   analysis_list = get_analysis_list(sites_to_process=unprocessed_sites)
+#   analyze = perform_analysis.expand(analysis_config=analysis_list)
+
+#   clean_up >> analysis_list >> analyze >> all_done
 
