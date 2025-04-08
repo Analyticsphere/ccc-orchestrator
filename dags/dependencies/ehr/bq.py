@@ -1,6 +1,4 @@
 from dependencies.ehr import constants, utils
-from google.cloud import bigquery  # type: ignore
-from google.cloud.exceptions import NotFound  # type: ignore
 
 
 def load_parquet_to_bq(file_path: str, project_id: str, dataset_id: str, table_name: str, write_type: constants.BQWriteTypes) -> None:
