@@ -5,7 +5,6 @@ PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-eaf-1061430463455.us-centr
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
-PIPELINE_LOG_TABLE = "nih-nci-dceg-connect-dev.ehr_pipeline_metadata.pipeline_runs"
 PIPELINE_START_STRING = "started"
 PIPELINE_RUNNING_STRING = "running"
 PIPELINE_COMPLETE_STRING = "completed"
@@ -15,7 +14,6 @@ PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 # When True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
 LOAD_ONLY_TARGET_VOCAB = True
 TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
-VOCAB_REF_GCS_BUCKET = "ehr_pipeline_vocabulary_files"
 VOCABULARY_TABLES = [
     "concept",
     "concept_ancestor",
@@ -27,6 +25,7 @@ VOCABULARY_TABLES = [
     "relationship",
     "vocabulary"
 ]
+
 VOCAB_HARMONIZED_TABLES = [
     "visit_occurrence",
     "condition_occurrence",

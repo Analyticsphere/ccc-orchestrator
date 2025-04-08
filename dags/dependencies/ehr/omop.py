@@ -52,7 +52,7 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
         }
     )
 
-def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, table_name: str, project_id: str, dataset_id: str, vocab_version: str, vocab_gcs_bucket: str) -> None:
+def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, table_name: str, project_id: str, dataset_id: str, vocab_version: str) -> None:
     utils.logger.info(f"Generating derived data table {table_name} for {delivery_date} delivery from {site}")
 
     utils.make_api_call(
@@ -64,8 +64,7 @@ def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, ta
             "table_name": table_name,
             "project_id": project_id,
             "dataset_id": dataset_id,
-            "vocab_version": vocab_version,
-            "vocab_gcs_bucket": vocab_gcs_bucket
+            "vocab_version": vocab_version
         }
     )
 

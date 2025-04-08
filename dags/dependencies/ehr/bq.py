@@ -28,38 +28,26 @@ def prep_dataset(project_id: str, dataset_id: str) -> None:
         }
     )
 
-def get_bq_log_row(site, date_to_check) -> list:
-    client = bigquery.Client()
+def get_bq_log_row(site: str, delivery_date: str) -> list:
+    utils.logger.info(f"Getting logging data for {delivery_date} delivery from {site}")
 
-    # Check if the table exists. If it doesn't, return an empty list.
     try:
-        client.get_table(constants.PIPELINE_LOG_TABLE)
-    except NotFound:
-        # Table does not exist, so return an empty list without error.
+        response = utils.make_api_call(
+            endpoint="get_log_row",
+            method="get",
+            params={
+                "site": site,
+                "delivery_date": delivery_date,
+            }
+        )
+
+        if response and 'log_row' in response:
+            return response['log_row']
         return []
 
-    # Construct the query to retrieve logs for the given site and delivery date.
-    query = f"""
-        SELECT *
-        FROM `{constants.PIPELINE_LOG_TABLE}`
-        WHERE site_name = @site
-          AND delivery_date = @delivery_date
-    """
-
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("site", "STRING", site),
-            bigquery.ScalarQueryParameter("delivery_date", "DATE", date_to_check),
-        ]
-    )
-
-    try:
-        query_job = client.query(query, job_config=job_config)
-        results = list(query_job.result())
-        return results
     except Exception as e:
-        utils.logger.error(f"Failed to retrieve BigQuery pipeline logs for site '{site}' and date '{date_to_check}': {e}")
-        raise Exception(f"Failed to retrieve BigQuery pipeline logs for site '{site}' and date '{date_to_check}': {e}") from e
+        utils.logger.error(f"Error getting logging data: {e}")
+        raise Exception(f"Error getting logging data: {e}") from e
 
 def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: str, run_id: str) -> None:
     status = constants.PIPELINE_START_STRING
@@ -67,7 +55,7 @@ def bq_log_start(site: str, delivery_date: str, file_type: str, omop_version: st
     utils.make_api_call(
         endpoint="pipeline_log",
         json_data={
-            "logging_table": constants.PIPELINE_LOG_TABLE,
+            #"logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
             "status": status,
@@ -83,7 +71,7 @@ def bq_log_running(site: str, delivery_date: str, run_id: str) -> None:
     utils.make_api_call(
         endpoint="pipeline_log",
         json_data={
-            "logging_table": constants.PIPELINE_LOG_TABLE,
+            #"logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
             "status": status,
@@ -97,7 +85,7 @@ def bq_log_error(site: str, delivery_date: str, run_id: str, message: str) -> No
     utils.make_api_call(
         endpoint="pipeline_log",
         json_data={
-            "logging_table": constants.PIPELINE_LOG_TABLE,
+            #"logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
             "status": status,
@@ -112,7 +100,7 @@ def bq_log_complete(site: str, delivery_date: str, run_id: str) -> None:
     utils.make_api_call(
         endpoint="pipeline_log",
         json_data={
-            "logging_table": constants.PIPELINE_LOG_TABLE,
+            #"logging_table": constants.PIPELINE_LOG_TABLE,
             "site_name": site,
             "delivery_date": delivery_date,
             "status": status,

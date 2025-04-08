@@ -54,7 +54,7 @@ def prepare_for_run() -> list[tuple[str, str]]:
     sites = utils.get_site_list()
 
     # Generate the optimized vocabulary files
-    vocab.create_optimized_vocab(constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
+    vocab.create_optimized_vocab(constants.TARGET_VOCAB_VERSION)
 
     for site in sites:
         delivery_date_to_check = utils.get_most_recent_folder(site)
@@ -220,7 +220,7 @@ def harmonize_vocab(file_config: dict) -> None:
         else:
             project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
             dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-            vocab.harmonize(constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET, constants.TARGET_CDM_VERSION, file_path, site, project_id, dataset_id)
+            vocab.harmonize(constants.TARGET_VOCAB_VERSION, constants.TARGET_CDM_VERSION, file_path, site, project_id, dataset_id)
     except AirflowException:
         # Re-raise the skip exception without logging it as an error
         raise
@@ -268,7 +268,6 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
         try:
             vocab.load_vocabulary_table_gcs_to_bq(
                 constants.TARGET_VOCAB_VERSION, 
-                constants.VOCAB_REF_GCS_BUCKET,
                 vocab_table,
                 project_id,
                 dataset_id
@@ -319,7 +318,7 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
     
         for dervied_table in constants.DERIVED_DATA_TABLES:
-            omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION, constants.VOCAB_REF_GCS_BUCKET)
+            omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION)
         
     except Exception as e:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
