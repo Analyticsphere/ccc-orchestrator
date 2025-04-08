@@ -110,7 +110,6 @@ def get_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
                 file_configs.append(file_config_obj.to_dict())
         except Exception as e:
             error_msg = f"Unable to get file list: {str(e)}"
-            utils.logger.error(error_msg)
             bq.bq_log_error(site, delivery_date, run_id, str(e))
             raise Exception(error_msg) from e
 
@@ -226,7 +225,6 @@ def harmonize_vocab(file_config: dict) -> None:
         raise
     except Exception as e:
         error_msg = f"Unable to harmonize vocabulary of file: {e}"
-        utils.logger.error(error_msg)
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e            
 
