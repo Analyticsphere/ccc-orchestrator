@@ -219,7 +219,9 @@ def harmonize_vocab(file_config: dict) -> None:
         else:
             project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
             dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+            utils.logger.warning(f"About to make harominization API call")
             vocab.harmonize(constants.TARGET_VOCAB_VERSION, constants.TARGET_CDM_VERSION, file_path, site, project_id, dataset_id)
+            utils.logger.warning(f"Did make harmonization API call")
     except AirflowException:
         # Re-raise the skip exception without logging it as an error
         raise
@@ -228,6 +230,7 @@ def harmonize_vocab(file_config: dict) -> None:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e            
 
+    utils.logger.warning(f"Outside/very end of harmonize_vocab() task function")
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 def prepare_bq(site_to_process: tuple[str, str]) -> None:

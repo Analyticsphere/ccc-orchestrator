@@ -165,14 +165,16 @@ def make_api_call(endpoint: str, method: str = "post",
                 url,
                 headers=get_auth_header(),
                 params=params,
-                timeout=timeout
+                #timeout=timeout
+                timeout=(60, 1800)
             )
         else:  # POST
             response = requests.post(
                 url,
                 headers=get_auth_header(),
                 json=json_data,
-                timeout=timeout
+                #timeout=timeout
+                timeout=(60, 1800)
             )
         
         # Check if the request was successful
