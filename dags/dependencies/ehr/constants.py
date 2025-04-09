@@ -11,6 +11,9 @@ PIPELINE_COMPLETE_STRING = "completed"
 PIPELINE_ERROR_STRING = "error"
 PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 
+DEFAULT_CONNECTION_TIMEOUT = 60
+DEFAULT_READ_TIMEOUT = 1800
+
 # When True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
 LOAD_ONLY_TARGET_VOCAB = True
 TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"

@@ -165,25 +165,23 @@ def make_api_call(endpoint: str, method: str = "post",
                 url,
                 headers=get_auth_header(),
                 params=params,
-                #timeout=timeout
-                timeout=(60, 1800)
+                timeout=(constants.DEFAULT_CONNECTION_TIMEOUT, constants.DEFAULT_READ_TIMEOUT) if timeout is None else timeout
             )
         else:  # POST
             response = requests.post(
                 url,
                 headers=get_auth_header(),
                 json=json_data,
-                #timeout=timeout
-                timeout=(60, 1800)
+                timeout=(constants.DEFAULT_CONNECTION_TIMEOUT, constants.DEFAULT_READ_TIMEOUT) if timeout is None else timeout
             )
         
-        # Check if the request was successful
-        if response.status_code != 200:
+        # Check if the request was successful or accepted
+        if response.status_code not in [200, 202]:
             error_message = f"API Error {response.status_code} from {endpoint}: {response.text}"
             logger.error(error_message)
             raise Exception(error_message)
         else:
-            logger.info(f"API call to {endpoint} successful: {response.text}")
+            logger.info(f"API call to {endpoint} successful: {response.status_code} - {response.text}")
         
         # Try to parse as JSON, but handle non-JSON responses
         if response.content:

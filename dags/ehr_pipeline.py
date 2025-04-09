@@ -1,3 +1,4 @@
+import time
 from datetime import timedelta
 
 import airflow  # type: ignore
@@ -205,32 +206,47 @@ def cdm_upgrade(file_config: dict) -> None:
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 def harmonize_vocab(file_config: dict) -> None:
+    """
+    Harmonize vocabulary in file against target vocabulary version.
+    """
     site = file_config[constants.FileConfig.SITE.value]
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
     file_path = file_config[constants.FileConfig.FILE_PATH.value]
+    table_name = file_config[constants.FileConfig.TABLE_NAME.value]
 
     try:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
-        table_name = file_config[constants.FileConfig.TABLE_NAME.value]
-        if table_name not in constants.VOCAB_HARMONIZED_TABLES:
+        # Check if this table should be harmonized
+        if not vocab.should_harmonize_table(table_name, constants.VOCAB_HARMONIZED_TABLES):
             utils.logger.info(f"Skip harmonizing vocabulary of file {table_name}")
             raise AirflowSkipException
-        else:
-            project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-            dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-            utils.logger.warning(f"About to make harominization API call")
-            vocab.harmonize(constants.TARGET_VOCAB_VERSION, constants.TARGET_CDM_VERSION, file_path, site, project_id, dataset_id)
-            utils.logger.warning(f"Did make harmonization API call")
+        
+        # Get configuration parameters
+        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        bucket_name = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
+        
+        # Call the updated harmonization function with polling
+        vocab.harmonize_with_polling(
+            vocab_version=constants.TARGET_VOCAB_VERSION,
+            omop_version=constants.TARGET_CDM_VERSION,
+            file_path=file_path,
+            site=site,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            bucket_name=bucket_name,
+            delivery_date=delivery_date
+        )
+        
     except AirflowException:
         # Re-raise the skip exception without logging it as an error
         raise
     except Exception as e:
         error_msg = f"Unable to harmonize vocabulary of file: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg) from e            
+        raise Exception(error_msg) from e        
 
-    utils.logger.warning(f"Outside/very end of harmonize_vocab() task function")
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 def prepare_bq(site_to_process: tuple[str, str]) -> None:
