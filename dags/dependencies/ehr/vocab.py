@@ -1,6 +1,6 @@
 import time
 
-from dependencies.ehr import utils
+from dependencies.ehr import utils, constants
 
 
 def load_vocabulary_table_gcs_to_bq(vocab_version: str, table_file_name: str, project_id: str, dataset_id: str) -> None:
@@ -116,15 +116,13 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
     # If we get here, we've exceeded max attempts
     raise Exception(f"Harmonization job {job_id} timed out after {max_retries} steps")
 
-def should_harmonize_table(table_name, harmonized_tables_list):
+def should_harmonize_table(table_name):
     """
     Determine if a table should be harmonized based on its name.
     
     Args:
-        table_name: The name of the table to check
-        harmonized_tables_list: List of tables that should be harmonized
-        
+        table_name: The name of the table to check        
     Returns:
         bool: True if the table should be harmonized, False otherwise
     """
-    return table_name in harmonized_tables_list
+    return table_name in constants.VOCAB_HARMONIZED_TABLES

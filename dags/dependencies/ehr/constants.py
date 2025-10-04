@@ -1,7 +1,8 @@
 from enum import Enum
+import os
 
 # Main endpoint
-PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-155089172944.us-central1.run.app"
+OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSOR_ENDPOINT DEFINED')
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 

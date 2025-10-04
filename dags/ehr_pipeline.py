@@ -219,7 +219,7 @@ def harmonize_vocab(file_config: dict) -> None:
 
         # Check if this table should be harmonized
         if not vocab.should_harmonize_table(table_name, constants.VOCAB_HARMONIZED_TABLES):
-            utils.logger.info(f"Skip harmonizing vocabulary of file {table_name}")
+            utils.logger.info(f"File {table_name} is not a clinical data table and does not need vocabulary harmonization")
             raise AirflowSkipException
         
         # Get configuration parameters
