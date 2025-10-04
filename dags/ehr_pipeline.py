@@ -40,7 +40,7 @@ def check_api_health() -> None:
     """
     utils.logger.info("Checking OMOP file processor API status")
     try:
-        result = utils.check_service_health(constants.PROCESSOR_ENDPOINT)
+        result = utils.check_service_health(constants.OMOP_PROCESSOR_ENDPOINT)
         if result['status'] != 'healthy':
             raise Exception(f"API health check failed. Status: {result['status']}")
 
@@ -218,7 +218,7 @@ def harmonize_vocab(file_config: dict) -> None:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
         # Check if this table should be harmonized
-        if not vocab.should_harmonize_table(table_name, constants.VOCAB_HARMONIZED_TABLES):
+        if not vocab.should_harmonize_table(table_name):
             utils.logger.info(f"File {table_name} is not a clinical data table and does not need vocabulary harmonization")
             raise AirflowSkipException
         

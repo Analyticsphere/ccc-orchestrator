@@ -1,7 +1,7 @@
 import os
+from pathlib import Path
 
 from dependencies.ehr import constants, utils
-
 
 class FileConfig:
     def __init__(self, site: str, delivery_date: str, source_file: str):
@@ -15,7 +15,12 @@ class FileConfig:
         self.bq_dataset = self.site_config[constants.FileConfig.BQ_DATASET.value]
         self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
         self.file_path = f"{self.gcs_bucket}/{self.delivery_date}/{self.source_file}"
-        self.table_name = os.path.splitext(os.path.basename(source_file))[0]
+        
+        # Remove all file extensions (e.g., .csv.gz) to get the true base name for table_name
+        table_base = Path(os.path.basename(source_file))
+        while table_base.suffix:
+            table_base = table_base.with_suffix("")
+        self.table_name = table_base.name
 
     def to_dict(self):
         return {

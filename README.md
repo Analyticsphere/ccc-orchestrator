@@ -44,7 +44,7 @@ site:
 ### Environment Variables
 
 The pipeline requires the following values be set in the constants.py file:
-- `PROCESSOR_ENDPOINT`: URL of the OMOP file processor API
+- `OMOP_PROCESSOR_ENDPOINT`: URL of the OMOP file processor API
 - `PIPELINE_LOG_TABLE`: BigQuery table for pipeline logging
 
 ## Pipeline Tasks

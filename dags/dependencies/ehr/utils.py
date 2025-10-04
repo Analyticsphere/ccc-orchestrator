@@ -153,7 +153,7 @@ def make_api_call(endpoint: str, method: str = "post",
     """
     Makes an API call to the processor endpoint with standardized error handling.
     """
-    url = f"{constants.PROCESSOR_ENDPOINT}/{endpoint}"
+    url = f"{constants.OMOP_PROCESSOR_ENDPOINT}/{endpoint}"
 
     # pipeline_log calls are made often and clutter the logs, don't display this message
     if endpoint != "pipeline_log":
