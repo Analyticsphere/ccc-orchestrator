@@ -3,6 +3,7 @@ import os
 
 # Main endpoint
 OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSOR_ENDPOINT DEFINED')
+OMOP_ANALYZER_ENDPOINT = os.getenv('OMOP_ANALYZER_ENDPOINT', 'NO OMOP_ANALYZER_ENDPOINT DEFINED')
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
@@ -15,9 +16,10 @@ PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 DEFAULT_CONNECTION_TIMEOUT = 60
 DEFAULT_READ_TIMEOUT = 1800
 
-# When True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
+# When LOAD_ONLY_TARGET_VOCAB is True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
 LOAD_ONLY_TARGET_VOCAB = True
-TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
+TARGET_VOCAB_VERSION = os.getenv('TARGET_VOCAB_VERSION', 'v5.0 30-AUG-24')
+
 VOCABULARY_TABLES = [
     "concept",
     "concept_ancestor",
@@ -64,6 +66,8 @@ class FileConfig(str, Enum):
     SOURCE_FILE = "source_file"
     FILE_PATH = "file_path"
     TABLE_NAME = "table_name"
+    DATE_FORMAT = "date_format"
+    DATETIME_FORMAT = "datetime_format"
 
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"

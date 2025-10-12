@@ -170,8 +170,10 @@ def normalize_file(file_config: dict) -> None:
 
         file_path = file_config[constants.FileConfig.FILE_PATH.value]#utils.get_file_path(file_config)
         omop_version = file_config[constants.FileConfig.OMOP_VERSION.value]
+        date_format = file_config[constants.FileConfig.DATE_FORMAT.value]
+        datetime_format = file_config[constants.FileConfig.DATETIME_FORMAT.value]
 
-        processing.normalize_parquet_file(file_path, omop_version)
+        processing.normalize_parquet_file(file_path, omop_version, date_format, datetime_format)
     except Exception as e:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(f"Unable to normalize file: {e}") from e

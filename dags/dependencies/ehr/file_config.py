@@ -15,6 +15,8 @@ class FileConfig:
         self.bq_dataset = self.site_config[constants.FileConfig.BQ_DATASET.value]
         self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
         self.file_path = f"{self.gcs_bucket}/{self.delivery_date}/{self.source_file}"
+        self.date_format = self.site_config.get(constants.FileConfig.DATE_FORMAT.value, None)
+        self.datetime_format = self.site_config.get(constants.FileConfig.DATETIME_FORMAT.value, None)
         
         # Remove all file extensions (e.g., .csv.gz) to get the true base name for table_name
         table_base = Path(os.path.basename(source_file))
@@ -33,6 +35,8 @@ class FileConfig:
             constants.FileConfig.BQ_DATASET.value: self.bq_dataset,
             constants.FileConfig.OMOP_VERSION.value: self.omop_version,
             constants.FileConfig.FILE_PATH.value: self.file_path,
+            constants.FileConfig.DATE_FORMAT.value: self.date_format,
+            constants.FileConfig.DATETIME_FORMAT.value: self.datetime_format,
             constants.FileConfig.TABLE_NAME.value: self.table_name
         }
 

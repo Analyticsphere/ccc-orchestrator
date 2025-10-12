@@ -55,17 +55,19 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
         }
     )
 
-def normalize_parquet_file(file_path: str, cdm_version: str) -> None:
+def normalize_parquet_file(file_path: str, cdm_version: str, date_format: str, datetime_format: str) -> None:
     """
     Standardize OMOP data file structure.
     """
-    utils.logger.info(f"Normalizing Parquet file gs://{file_path}")
+    utils.logger.info(f"Normalizing file gs://{file_path}")
     
     utils.make_api_call(
         endpoint="normalize_parquet",
         json_data={
             "file_path": file_path,
-            "omop_version": cdm_version
+            "omop_version": cdm_version,
+            "date_format": date_format,
+            "datetime_format": datetime_format
         }
     )
 
