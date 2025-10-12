@@ -55,7 +55,7 @@ def prepare_for_run() -> list[tuple[str, str]]:
     sites = utils.get_site_list()
 
     # Generate the optimized vocabulary files
-    vocab.create_optimized_vocab(constants.TARGET_VOCAB_VERSION)
+    vocab.create_optimized_vocab(constants.OMOP_TARGET_VOCAB_VERSION)
 
     for site in sites:
         delivery_date_to_check = utils.get_most_recent_folder(site)
@@ -193,14 +193,11 @@ def cdm_upgrade(file_config: dict) -> None:
         cdm_version = file_config[constants.FileConfig.OMOP_VERSION.value]
         file_path = file_config[constants.FileConfig.FILE_PATH.value]
 
-        if cdm_version == constants.TARGET_CDM_VERSION:
-            utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.TARGET_CDM_VERSION}; upgrade not needed")
+        if cdm_version == constants.OMOP_TARGET_CDM_VERSION:
+            utils.logger.info(f"CDM version of {file_path} ({cdm_version}) matches upgrade target {constants.OMOP_TARGET_CDM_VERSION}; upgrade not needed")
             pass
-        elif cdm_version == "5.3":
-            omop.upgrade_cdm(file_path, cdm_version, constants.TARGET_CDM_VERSION)
         else:
-            utils.logger.error(f"OMOP CDM version {cdm_version} not supported")
-            raise Exception(f"OMOP CDM version {cdm_version} not supported")
+            omop.upgrade_cdm(file_path, cdm_version, constants.OMOP_TARGET_CDM_VERSION)
     except Exception as e:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(f"Unable to upgrade file: {e}") from e
@@ -231,8 +228,8 @@ def harmonize_vocab(file_config: dict) -> None:
         
         # Call the updated harmonization function with polling
         vocab.harmonize_with_polling(
-            vocab_version=constants.TARGET_VOCAB_VERSION,
-            omop_version=constants.TARGET_CDM_VERSION,
+            vocab_version=constants.OMOP_TARGET_VOCAB_VERSION,
+            omop_version=constants.OMOP_TARGET_CDM_VERSION,
             file_path=file_path,
             site=site,
             project_id=project_id,
@@ -274,26 +271,29 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
 def load_target_vocab(site_to_process: tuple[str, str]) -> None:
     """
     Load all target vocabulary tables to BigQuery
-    If constants.LOAD_ONLY_TARGET_VOCAB is False, the site's vocab tables will overwrite default tables loaded by this task
+    If the site's overwrite_site_vocab_with_standard is False, the site's vocab tables will overwrite default tables loaded by this task
     """
 
     site, delivery_date = site_to_process
 
     site_config = utils.get_site_config_file()
-    project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
-    dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+    site_dict = site_config['site'][site]
+    project_id = site_dict[constants.FileConfig.PROJECT_ID.value]
+    dataset_id = site_dict[constants.FileConfig.BQ_DATASET.value]
+    overwrite_site_vocab_with_standard = site_dict.get(constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value, True)
     
-    for vocab_table in constants.VOCABULARY_TABLES:
-        try:
-            vocab.load_vocabulary_table_gcs_to_bq(
-                constants.TARGET_VOCAB_VERSION, 
-                vocab_table,
-                project_id,
-                dataset_id
+    if overwrite_site_vocab_with_standard:
+        for vocab_table in constants.VOCABULARY_TABLES:
+            try:
+                vocab.load_vocabulary_table_gcs_to_bq(
+                    constants.OMOP_TARGET_VOCAB_VERSION, 
+                    vocab_table,
+                    project_id,
+                    dataset_id
                 )
-        except Exception as e:
-            bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
-            raise Exception(f"Unable to write to BigQuery: {e}") from e                
+            except Exception as e:
+                bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+                raise Exception(f"Unable to write to BigQuery: {e}") from e
 
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed")
@@ -312,7 +312,14 @@ def load_to_bq(file_config: dict) -> None:
         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
         table_name = file_config[constants.FileConfig.TABLE_NAME.value]
 
-        if (constants.LOAD_ONLY_TARGET_VOCAB and table_name in constants.VOCABULARY_TABLES) or (table_name in constants.VOCAB_HARMONIZED_TABLES):
+        # Don't load standard vocabulary files if using site-specific vocabulary
+        site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
+        overwrite_site_vocab_with_standard = site_config.get(constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value)
+        if overwrite_site_vocab_with_standard and table_name in constants.VOCABULARY_TABLES:
+            utils.logger.info(f"Skip loading {table_name} to BigQuery")
+            raise AirflowSkipException
+        # Also skip vocab harmonized tables since they were already loaded in harmonize_vocab task
+        elif table_name in constants.VOCAB_HARMONIZED_TABLES:
             utils.logger.info(f"Skip loading {table_name} to BigQuery")
             raise AirflowSkipException
         else:
@@ -327,7 +334,6 @@ def load_to_bq(file_config: dict) -> None:
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 def derived_data_tables(site_to_process: tuple[str, str]) -> None:
-
     site, delivery_date = site_to_process
     try:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
@@ -337,7 +343,7 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
     
         for dervied_table in constants.DERIVED_DATA_TABLES:
-            omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.TARGET_VOCAB_VERSION)
+            omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.OMOP_TARGET_VOCAB_VERSION)
         
     except Exception as e:
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
@@ -365,7 +371,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             # Create empty tables for OMOP files not provided in delivery
             project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
             dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-            omop.create_missing_omop_tables(project_id, dataset_id, constants.TARGET_CDM_VERSION)
+            omop.create_missing_omop_tables(project_id, dataset_id, constants.OMOP_TARGET_CDM_VERSION)
             
             # Add record to cdm_source table in BigQuery, if not provided by site
             cdm_source_data = omop.generate_cdm_source_json(site, delivery_date)

@@ -12,8 +12,8 @@ def generate_report_json(site: str, delivery_date: str) -> dict:
         "site_display_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
         "file_delivery_format": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.FILE_DELIVERY_FORMAT.value],
         "delivered_cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
-        "target_vocabulary_version": constants.TARGET_VOCAB_VERSION,
-        "target_cdm_version": constants.TARGET_CDM_VERSION,
+        "target_vocabulary_version": constants.OMOP_TARGET_VOCAB_VERSION,
+        "target_cdm_version": constants.OMOP_TARGET_CDM_VERSION,
     }
 
     return report_data
