@@ -146,14 +146,14 @@ def get_file_path(file_config: dict) -> str:
 
     return file_path
 
-def make_api_call(endpoint: str, method: str = "post", 
+def make_api_call(url: str, endpoint: str, method: str = "post", 
                  params: Optional[Dict[str, str]] = None, 
                  json_data: Optional[Dict[str, Any]] = None, 
                  timeout: Optional[tuple] = None) -> Optional[Any]:
     """
     Makes an API call to the processor endpoint with standardized error handling.
     """
-    url = f"{constants.OMOP_PROCESSOR_ENDPOINT}/{endpoint}"
+    api_call_url = f"{url}/{endpoint}"
 
     # pipeline_log calls are made often and clutter the logs, don't display this message
     if endpoint != "pipeline_log":
@@ -162,26 +162,26 @@ def make_api_call(endpoint: str, method: str = "post",
     try:
         if method.lower() == "get":
             response = requests.get(
-                url,
+                api_call_url,
                 headers=get_auth_header(),
                 params=params,
-                timeout=(constants.DEFAULT_CONNECTION_TIMEOUT, constants.DEFAULT_READ_TIMEOUT) if timeout is None else timeout
+                timeout=timeout
             )
         else:  # POST
             response = requests.post(
-                url,
+                api_call_url,
                 headers=get_auth_header(),
                 json=json_data,
-                timeout=(constants.DEFAULT_CONNECTION_TIMEOUT, constants.DEFAULT_READ_TIMEOUT) if timeout is None else timeout
+                timeout=timeout
             )
         
-        # Check if the request was successful or accepted
-        if response.status_code not in [200, 202]:
+        # Check if the request was successful (accept any 2xx response)
+        if not (200 <= response.status_code < 300):
             error_message = f"API Error {response.status_code} from {endpoint}: {response.text}"
             logger.error(error_message)
             raise Exception(error_message)
         else:
-            logger.info(f"API call to {endpoint} successful: {response.status_code} - {response.text}")
+            logger.info(f"API call to {endpoint} successful: {response.text}")
         
         # Try to parse as JSON, but handle non-JSON responses
         if response.content:

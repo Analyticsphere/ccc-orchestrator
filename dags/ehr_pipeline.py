@@ -1,5 +1,5 @@
-import time
 from datetime import timedelta
+import os
 
 import airflow  # type: ignore
 import dependencies.ehr.bq as bq
@@ -10,6 +10,7 @@ import dependencies.ehr.processing as processing
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
 import dependencies.ehr.vocab as vocab
+import dependencies.ehr.analysis as analysis
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.exceptions import AirflowSkipException  # type: ignore
@@ -384,6 +385,54 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"Unable to perform final cleanup: {e}") from e
 
 
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+def run_dqd(site_to_process: tuple[str, str]) -> None:
+
+    site, delivery_date = site_to_process
+    bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
+
+    try:
+        utils.logger.info(f"Triggering DQD checks for {site} data delivered on {delivery_date}")
+
+        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
+        cdm_source_name = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value]
+        artifact_path = constants.ArtifactPaths.DQD.value
+        gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
+        cdm_version = constants.OMOP_TARGET_CDM_VERSION
+     
+        # TODO pass gcs_artifact_path to run_dqd endpoint
+        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path, cdm_version=cdm_version, cdm_source_name=cdm_source_name)
+    except Exception as e:
+        error_msg = f"Unable to run DQD: {e}"
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+    
+# @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+# def run_achilles(site_to_process: tuple[str, str]) -> None:
+
+#     site, delivery_date = site_to_process
+#     bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
+
+#     try:
+#         utils.logger.info(f"Triggering Achilles run for {site} data delivered on {delivery_date}")
+
+#         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
+#         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+#         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
+#         artifact_path = constants.ArtifactPaths.DQD.value
+#         gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
+
+#         # TODO pass gcs_artifact_path to run_achilles endpoint
+#         analysis.run_achilles(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path)
+#     except Exception as e:
+#         error_msg = f"Unable to run Achilles: {e}"
+#         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+#         raise Exception(error_msg) from e
+
+
+
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
 def log_done() -> None:
     # This final task will run regardless of previous task states.
@@ -437,10 +486,15 @@ with dag:
     load_file = load_to_bq.expand(file_config=file_list)
     cleanup = final_cleanup(sites_to_process=unprocessed_sites)
 
+    # Hades Analytics
+    dqd = run_dqd.expand(site_to_process=unprocessed_sites)
+    # TODO task to load DQD results to BQ
+    #run_achilles = run_achilles.expand(site_to_process=unprocessed_sites)
+
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
     
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq 
-    clean_bq >> vocab_harmonization >> load_vocab >> load_file >> derived_data >> cleanup >> all_done
+    clean_bq >> vocab_harmonization >> load_vocab >> load_file >> derived_data >> cleanup >> dqd >> all_done
