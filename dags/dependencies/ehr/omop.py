@@ -12,8 +12,8 @@ def generate_report_json(site: str, delivery_date: str) -> dict:
         "site_display_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
         "file_delivery_format": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.FILE_DELIVERY_FORMAT.value],
         "delivered_cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
-        "target_vocabulary_version": constants.TARGET_VOCAB_VERSION,
-        "target_cdm_version": constants.TARGET_CDM_VERSION,
+        "target_vocabulary_version": constants.OMOP_TARGET_VOCAB_VERSION,
+        "target_cdm_version": constants.OMOP_TARGET_CDM_VERSION,
     }
 
     return report_data
@@ -44,6 +44,7 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
     utils.logger.info(f"Creating any missing OMOP tables in {project_id}.{dataset_id}")
     
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="create_missing_tables",
         json_data={
             "omop_version": omop_version,
@@ -56,6 +57,7 @@ def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, ta
     utils.logger.info(f"Generating derived data table {table_name} for {delivery_date} delivery from {site}")
 
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="populate_derived_data",
         json_data={
             "site": site,
@@ -72,6 +74,7 @@ def populate_cdm_source(cdm_source_data: dict) -> None:
     utils.logger.info(f"If empty, populating cdm_source table for {cdm_source_data['source_release_date']} delivery from {cdm_source_data['cdm_source_abbreviation']}")
     
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="populate_cdm_source",
         json_data=cdm_source_data
     )
@@ -83,6 +86,7 @@ def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> No
     utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
 
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="upgrade_cdm",
         json_data={
             "file_path": file_path,

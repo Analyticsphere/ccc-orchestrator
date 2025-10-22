@@ -1,18 +1,20 @@
 import time
 
-from dependencies.ehr import utils
+from dependencies.ehr import utils, constants
 
 
 def load_vocabulary_table_gcs_to_bq(vocab_version: str, table_file_name: str, project_id: str, dataset_id: str) -> None:
     utils.logger.info(f"Loading {table_file_name} vocabulary table to {project_id}.{dataset_id}")
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="load_target_vocab",
         json_data={
             "vocab_version": vocab_version,
             "table_file_name": table_file_name,
             "project_id": project_id,
             "dataset_id": dataset_id,
-        }
+        },
+        timeout=(60, 3600)
     )
 
 
@@ -20,10 +22,12 @@ def create_optimized_vocab(vocab_version: str) -> None:
     utils.logger.info(f"Creating optimized version of {vocab_version} if required")
 
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="create_optimized_vocab",
         json_data={
             "vocab_version": vocab_version
-        }
+        },
+        timeout=(60, 3600)
     )
 
 def harmonize(vocab_version: str, omop_version: str, file_path: str, site: str, project_id: str, dataset_id: str) -> None:
@@ -34,6 +38,7 @@ def harmonize(vocab_version: str, omop_version: str, file_path: str, site: str, 
     utils.logger.info(f"Standardizing {file_path} to vocabulary version {vocab_version}")
 
     utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="harmonize_vocab",
         json_data={
             "vocab_version": vocab_version,
@@ -42,7 +47,8 @@ def harmonize(vocab_version: str, omop_version: str, file_path: str, site: str, 
             "site": site,
             "project_id": project_id,
             "dataset_id": dataset_id
-        }
+        },
+        timeout=(60, 3600)
     )
 
 def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str, site: str, 
@@ -69,6 +75,7 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
     
     # Start the harmonization job
     response = utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="harmonize_vocab",
         json_data={
             "vocab_version": vocab_version,
@@ -77,7 +84,8 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
             "site": site,
             "project_id": project_id,
             "dataset_id": dataset_id
-        }
+        },
+        timeout=(60, 3600)
     )
     
     if not isinstance(response, dict) or 'job_id' not in response:
@@ -93,12 +101,14 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
         utils.logger.info(f"Processing step for job {job_id} - attempt {attempt+1}/{max_retries}")
         
         step_response = utils.make_api_call(
+            url=constants.OMOP_PROCESSOR_ENDPOINT,
             endpoint="harmonize_vocab_process_step",
             json_data={
                 "job_id": job_id,
                 "bucket": bucket,
                 "delivery_date": delivery_date
-            }
+            },
+            timeout=(60, 3600)
         )
         
         if step_response.get('status') == 'completed':
@@ -116,15 +126,13 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
     # If we get here, we've exceeded max attempts
     raise Exception(f"Harmonization job {job_id} timed out after {max_retries} steps")
 
-def should_harmonize_table(table_name, harmonized_tables_list):
+def should_harmonize_table(table_name):
     """
     Determine if a table should be harmonized based on its name.
     
     Args:
-        table_name: The name of the table to check
-        harmonized_tables_list: List of tables that should be harmonized
-        
+        table_name: The name of the table to check        
     Returns:
         bool: True if the table should be harmonized, False otherwise
     """
-    return table_name in harmonized_tables_list
+    return table_name in constants.VOCAB_HARMONIZED_TABLES

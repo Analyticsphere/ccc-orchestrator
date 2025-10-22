@@ -1,7 +1,11 @@
 from enum import Enum
+import os
 
-# Main endpoint
-PROCESSOR_ENDPOINT = "https://ccc-omop-file-processor-155089172944.us-central1.run.app"
+# Environmental variables from Airflow/Cloud Composer
+OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSOR_ENDPOINT DEFINED')
+OMOP_ANALYZER_ENDPOINT = os.getenv('OMOP_ANALYZER_ENDPOINT', 'NO OMOP_ANALYZER_ENDPOINT DEFINED')
+OMOP_TARGET_VOCAB_VERSION = os.getenv('OMOP_TARGET_VOCAB_VERSION', 'v5.0 27-AUG-25')
+OMOP_TARGET_CDM_VERSION = os.getenv('OMOP_TARGET_CDM_VERSION', '5.4')
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
@@ -14,9 +18,6 @@ PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 DEFAULT_CONNECTION_TIMEOUT = 60
 DEFAULT_READ_TIMEOUT = 1800
 
-# When True, overwrites site provided vocabulary tables with target vocabulary tables from Athena
-LOAD_ONLY_TARGET_VOCAB = True
-TARGET_VOCAB_VERSION = "v5.0 30-AUG-24"
 VOCABULARY_TABLES = [
     "concept",
     "concept_ancestor",
@@ -41,14 +42,13 @@ VOCAB_HARMONIZED_TABLES = [
     "specimen"
 ]
 
-TARGET_CDM_VERSION = "5.4"
-
 CONDITION_ERA = "condition_era"
 DRUG_ERA = "drug_era"
 OBSERVATION_PERIOD = "observation_period"
 DERIVED_DATA_TABLES: list = [DRUG_ERA, CONDITION_ERA, OBSERVATION_PERIOD]
 
 CSV = ".csv"
+CSV_GZ = ".csv.gz"
 PARQUET = ".parquet"
 
 class FileConfig(str, Enum):
@@ -63,6 +63,9 @@ class FileConfig(str, Enum):
     SOURCE_FILE = "source_file"
     FILE_PATH = "file_path"
     TABLE_NAME = "table_name"
+    DATE_FORMAT = "date_format"
+    DATETIME_FORMAT = "datetime_format"
+    OVERWRITE_SITE_VOCAB_WITH_STANDARD = "overwrite_site_vocab_with_standard"
 
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"
