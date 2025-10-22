@@ -1,5 +1,4 @@
 from datetime import timedelta
-import os
 
 import airflow  # type: ignore
 import dependencies.ehr.bq as bq
@@ -203,7 +202,7 @@ def cdm_upgrade(file_config: dict) -> None:
         raise Exception(f"Unable to upgrade file: {e}") from e
 
 
-@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
 def harmonize_vocab(file_config: dict) -> None:
     """
     Harmonize vocabulary in file against target vocabulary version.

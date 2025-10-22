@@ -14,7 +14,7 @@ def load_vocabulary_table_gcs_to_bq(vocab_version: str, table_file_name: str, pr
             "project_id": project_id,
             "dataset_id": dataset_id,
         },
-        timeout=(60, 3600)
+        timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC)
     )
 
 
@@ -27,7 +27,7 @@ def create_optimized_vocab(vocab_version: str) -> None:
         json_data={
             "vocab_version": vocab_version
         },
-        timeout=(60, 3600)
+        timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC)
     )
 
 def harmonize(vocab_version: str, omop_version: str, file_path: str, site: str, project_id: str, dataset_id: str) -> None:
@@ -48,12 +48,12 @@ def harmonize(vocab_version: str, omop_version: str, file_path: str, site: str, 
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        timeout=(60, 3600)
+        timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC)
     )
 
 def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str, site: str, 
                           project_id: str, dataset_id: str, bucket_name: str, delivery_date: str, 
-                          max_retries: int = 60) -> None:
+                          max_retries: int = constants.DEFAULT_CONNECTION_TIMEOUT_SEC) -> None:
     """
     Advanced harmonization function that submits a job and polls for completion.
     
@@ -85,7 +85,7 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        timeout=(60, 3600)
+        timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC)
     )
     
     if not isinstance(response, dict) or 'job_id' not in response:
@@ -108,7 +108,7 @@ def harmonize_with_polling(vocab_version: str, omop_version: str, file_path: str
                 "bucket": bucket,
                 "delivery_date": delivery_date
             },
-            timeout=(60, 3600)
+            timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC)
         )
         
         if step_response.get('status') == 'completed':
