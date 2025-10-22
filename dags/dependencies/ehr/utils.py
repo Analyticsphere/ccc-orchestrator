@@ -2,11 +2,11 @@ import logging
 import subprocess
 import sys
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple, Union
 
 import requests  # type: ignore
 import yaml  # type: ignore
-from dependencies.ehr import constants, file_config
+from dependencies.ehr import constants
 from google.cloud import storage  # type: ignore
 
 """
@@ -146,10 +146,14 @@ def get_file_path(file_config: dict) -> str:
 
     return file_path
 
-def make_api_call(url: str, endpoint: str, method: str = "post", 
-                 params: Optional[Dict[str, str]] = None, 
-                 json_data: Optional[Dict[str, Any]] = None, 
-                 timeout: Optional[tuple] = None) -> Optional[Any]:
+def make_api_call(
+                 url: Optional[str],
+                 endpoint: str,
+                 method: str = "post",
+                 params: Optional[Dict[str, str]] = None,
+                 json_data: Optional[Dict[str, Any]] = None,
+                 timeout: Optional[Union[float, Tuple[float, float]]] = None
+                 ) -> Optional[Any]:
     """
     Makes an API call to the processor endpoint with standardized error handling.
     """
