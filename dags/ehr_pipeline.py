@@ -204,7 +204,7 @@ def cdm_upgrade(file_config: dict) -> None:
         raise Exception(f"Unable to upgrade file: {e}") from e
 
 
-@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
 def harmonize_vocab(file_config: dict) -> None:
     """
     Harmonize vocabulary in file against target vocabulary version.
