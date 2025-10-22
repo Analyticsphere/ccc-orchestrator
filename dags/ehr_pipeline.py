@@ -10,7 +10,6 @@ import dependencies.ehr.processing as processing
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
 import dependencies.ehr.vocab as vocab
-import dependencies.ehr.analysis as analysis
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.exceptions import AirflowSkipException  # type: ignore
