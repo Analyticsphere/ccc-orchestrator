@@ -15,6 +15,7 @@ from airflow.exceptions import AirflowSkipException  # type: ignore
 from airflow.exceptions import AirflowException
 from airflow.operators.python import get_current_context  # type: ignore
 from airflow.utils.dates import days_ago  # type: ignore
+from airflow.utils.task_group import TaskGroup  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule
 
 default_args = {
@@ -49,12 +50,16 @@ def check_api_health() -> None:
         raise
 
 @task()
-def prepare_for_run() -> list[tuple[str, str]]:
+def identify_sites_to_process() -> list[tuple[str, str]]:
+    """
+    Identify sites with unprocessed or errored deliveries.
+    Also generates optimized vocabulary files needed for processing.
+    """
     unprocessed_sites: list[tuple[str, str]] = []
     sites = utils.get_site_list()
 
     # Generate the optimized vocabulary files
-    vocab.create_optimized_vocab(constants.OMOP_TARGET_VOCAB_VERSION)
+    vocab.create_optimized_vocab()
 
     for site in sites:
         delivery_date_to_check = utils.get_most_recent_folder(site)
@@ -68,9 +73,9 @@ def prepare_for_run() -> list[tuple[str, str]]:
 
 
 @task.short_circuit
-def check_for_unprocessed(unprocessed_sites: list[tuple[str, str]]) -> bool:
+def skip_if_no_sites(unprocessed_sites: list[tuple[str, str]]) -> bool:
     """
-    Returns False (which skips downstream tasks) if there are no unprocessed sites.
+    Returns False (which skips downstream tasks) if there are no sites to process.
     """
     if not unprocessed_sites:
         utils.logger.info("No unprocessed sites found. Skipping processing tasks.")
@@ -203,9 +208,9 @@ def cdm_upgrade(file_config: dict) -> None:
 
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
-def harmonize_vocab(file_config: dict) -> None:
+def harmonize_vocab_source_target(file_config: dict) -> None:
     """
-    Harmonize vocabulary in file against target vocabulary version.
+    Step 1: Execute source_target vocabulary harmonization.
     """
     site = file_config[constants.FileConfig.SITE.value]
     delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
@@ -221,29 +226,169 @@ def harmonize_vocab(file_config: dict) -> None:
             raise AirflowSkipException
         
         # Get configuration parameters
-        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-        bucket_name = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
-        
-        # Call the updated harmonization function with polling
-        vocab.harmonize_with_polling(
-            vocab_version=constants.OMOP_TARGET_VOCAB_VERSION,
-            omop_version=constants.OMOP_TARGET_CDM_VERSION,
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+
+        # Execute source_target step
+        vocab.harmonize_source_target(
             file_path=file_path,
             site=site,
             project_id=project_id,
-            dataset_id=dataset_id,
-            bucket_name=bucket_name,
-            delivery_date=delivery_date
+            dataset_id=dataset_id
         )
         
     except AirflowException:
         # Re-raise the skip exception without logging it as an error
         raise
     except Exception as e:
-        error_msg = f"Unable to harmonize vocabulary of file: {e}"
+        error_msg = f"Unable to execute source_target harmonization step: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
-        raise Exception(error_msg) from e        
+        raise Exception(error_msg) from e
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+def harmonize_vocab_target_remap(file_config: dict) -> None:
+    """
+    Step 2: Execute target_remap vocabulary harmonization.
+    """
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    file_path = file_config[constants.FileConfig.FILE_PATH.value]
+    table_name = file_config[constants.FileConfig.TABLE_NAME.value]
+
+    try:
+        # Check if this table should be harmonized
+        if not vocab.should_harmonize_table(table_name):
+            raise AirflowSkipException
+        
+        # Get configuration parameters
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+
+        # Execute target_remap step
+        vocab.harmonize_target_remap(
+            file_path=file_path,
+            site=site,
+            project_id=project_id,
+            dataset_id=dataset_id
+        )
+        
+    except AirflowException:
+        raise
+    except Exception as e:
+        error_msg = f"Unable to execute target_remap harmonization step: {e}"
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+def harmonize_vocab_target_replacement(file_config: dict) -> None:
+    """
+    Step 3: Execute target_replacement vocabulary harmonization.
+    """
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    file_path = file_config[constants.FileConfig.FILE_PATH.value]
+    table_name = file_config[constants.FileConfig.TABLE_NAME.value]
+
+    try:
+        # Check if this table should be harmonized
+        if not vocab.should_harmonize_table(table_name):
+            raise AirflowSkipException
+        
+        # Get configuration parameters
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+
+        # Execute target_replacement step
+        vocab.harmonize_target_replacement(
+            file_path=file_path,
+            site=site,
+            project_id=project_id,
+            dataset_id=dataset_id
+        )
+        
+    except AirflowException:
+        raise
+    except Exception as e:
+        error_msg = f"Unable to execute target_replacement harmonization step: {e}"
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+def harmonize_vocab_domain_check(file_config: dict) -> None:
+    """
+    Step 4: Execute domain_check vocabulary harmonization.
+    """
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    file_path = file_config[constants.FileConfig.FILE_PATH.value]
+    table_name = file_config[constants.FileConfig.TABLE_NAME.value]
+
+    try:
+        # Check if this table should be harmonized
+        if not vocab.should_harmonize_table(table_name):
+            raise AirflowSkipException
+        
+        # Get configuration parameters
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+
+        # Execute domain_check step
+        vocab.harmonize_domain_check(
+            file_path=file_path,
+            site=site,
+            project_id=project_id,
+            dataset_id=dataset_id
+        )
+        
+    except AirflowException:
+        raise
+    except Exception as e:
+        error_msg = f"Unable to execute domain_check harmonization step: {e}"
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+def harmonize_vocab_omop_etl(file_config: dict) -> None:
+    """
+    Step 5: Execute omop_etl vocabulary harmonization and load to BigQuery.
+    """
+    site = file_config[constants.FileConfig.SITE.value]
+    delivery_date = file_config[constants.FileConfig.DELIVERY_DATE.value]
+    file_path = file_config[constants.FileConfig.FILE_PATH.value]
+    table_name = file_config[constants.FileConfig.TABLE_NAME.value]
+
+    try:
+        # Check if this table should be harmonized
+        if not vocab.should_harmonize_table(table_name):
+            raise AirflowSkipException
+        
+        # Get configuration parameters
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+
+        # Execute omop_etl step (final step that also loads to BQ)
+        vocab.harmonize_omop_etl(
+            file_path=file_path,
+            site=site,
+            project_id=project_id,
+            dataset_id=dataset_id
+        )
+        
+    except AirflowException:
+        raise
+    except Exception as e:
+        error_msg = f"Unable to execute omop_etl harmonization step: {e}"
+        bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
+        raise Exception(error_msg) from e
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
@@ -255,9 +400,9 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
     try:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
-        site_config = utils.get_site_config_file()
-        project_id = site_config['site'][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = site_config['site'][site][constants.FileConfig.BQ_DATASET.value]
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
 
         # Delete all tables within the BigQuery dataset.
         bq.prep_dataset(project_id, dataset_id)
@@ -275,11 +420,10 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
 
     site, delivery_date = site_to_process
 
-    site_config = utils.get_site_config_file()
-    site_dict = site_config['site'][site]
-    project_id = site_dict[constants.FileConfig.PROJECT_ID.value]
-    dataset_id = site_dict[constants.FileConfig.BQ_DATASET.value]
-    overwrite_site_vocab_with_standard = site_dict.get(constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value, True)
+    site_config = utils.get_site_config(site)
+    project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+    dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+    overwrite_site_vocab_with_standard = site_config.get(constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value, True)
     
     if overwrite_site_vocab_with_standard:
         for vocab_table in constants.VOCABULARY_TABLES:
@@ -307,12 +451,12 @@ def load_to_bq(file_config: dict) -> None:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
         gcs_file_path = file_config[constants.FileConfig.FILE_PATH.value]
-        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
         table_name = file_config[constants.FileConfig.TABLE_NAME.value]
 
         # Don't load standard vocabulary files if using site-specific vocabulary
-        site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
         overwrite_site_vocab_with_standard = site_config.get(constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value)
         if overwrite_site_vocab_with_standard and table_name in constants.VOCABULARY_TABLES:
             utils.logger.info(f"Skip loading {table_name} to BigQuery")
@@ -337,9 +481,10 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
     try:
         bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
 
-        project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-        dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-        gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
+        site_config = utils.get_site_config(site)
+        project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+        dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
+        gcs_bucket = site_config[constants.FileConfig.GCS_BUCKET.value]
     
         for dervied_table in constants.DERIVED_DATA_TABLES:
             omop.create_derived_data_table(site, gcs_bucket, delivery_date, dervied_table, project_id, dataset_id, constants.OMOP_TARGET_VOCAB_VERSION)
@@ -368,8 +513,9 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             validation.generate_delivery_report(report_data)
 
             # Create empty tables for OMOP files not provided in delivery
-            project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-            dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+            site_config = utils.get_site_config(site)
+            project_id = site_config[constants.FileConfig.PROJECT_ID.value]
+            dataset_id = site_config[constants.FileConfig.BQ_DATASET.value]
             omop.create_missing_omop_tables(project_id, dataset_id, constants.OMOP_TARGET_CDM_VERSION)
             
             # Add record to cdm_source table in BigQuery, if not provided by site
@@ -413,8 +559,8 @@ def log_done() -> None:
 # Define the DAG structure.
 with dag:
     api_health_check = check_api_health()
-    unprocessed_sites = prepare_for_run()
-    sites_exist = check_for_unprocessed(unprocessed_sites)
+    unprocessed_sites = identify_sites_to_process()
+    sites_exist = skip_if_no_sites(unprocessed_sites)
     file_list = get_files(sites_to_process=unprocessed_sites)
     
     # Expand the processing tasks across the list of file configurations.
@@ -426,8 +572,17 @@ with dag:
     # Remove all tables before loading new data
     clean_bq = prepare_bq.expand(site_to_process=unprocessed_sites)
 
-    # Vocab harmonization also loads data into BQ
-    vocab_harmonization = harmonize_vocab.expand(file_config=file_list)
+    # Vocab harmonization task group with 5 sequential steps
+    with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
+        # Each step is expanded across all file configs and executes in order
+        vocab_step1_source_target = harmonize_vocab_source_target.expand(file_config=file_list)
+        vocab_step2_target_remap = harmonize_vocab_target_remap.expand(file_config=file_list)
+        vocab_step3_target_replacement = harmonize_vocab_target_replacement.expand(file_config=file_list)
+        vocab_step4_domain_check = harmonize_vocab_domain_check.expand(file_config=file_list)
+        vocab_step5_omop_etl = harmonize_vocab_omop_etl.expand(file_config=file_list)
+        
+        # Chain the 5 vocabulary harmonization steps sequentially within the group
+        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl
 
     # After files have been harmonized, populate derived data
     derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
@@ -442,4 +597,9 @@ with dag:
     # Set task dependencies.
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> clean_bq
-    clean_bq >> vocab_harmonization >> load_vocab >> load_file >> derived_data >> cleanup >> all_done
+    
+    # Vocab harmonization task group executes after BQ preparation
+    clean_bq >> vocab_harmonization_group
+    
+    # Continue with remaining tasks after vocab harmonization
+    vocab_harmonization_group >> load_vocab >> load_file >> derived_data >> cleanup >> all_done

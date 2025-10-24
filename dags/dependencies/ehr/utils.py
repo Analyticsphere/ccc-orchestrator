@@ -14,7 +14,7 @@ Set up a logging instance that will write to stdout (and therefore show up in Go
 """
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='ehr-dag - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 # Create the logger at module level so its settings are applied throughout code base
@@ -68,6 +68,18 @@ def get_site_bucket(site: str) -> str:
     Return the parent GCS bucket for a given site
     """
     return get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
+
+def get_site_config(site: str) -> dict:
+    """
+    Return the configuration dictionary for a specific site.
+    
+    Args:
+        site: The site name
+    
+    Returns:
+        Dictionary containing the site's configuration
+    """
+    return get_site_config_file()[constants.FileConfig.SITE.value][site]
 
 def get_site_config_file() -> dict:
     """

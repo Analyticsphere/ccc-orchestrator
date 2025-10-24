@@ -6,6 +6,7 @@ OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSO
 OMOP_ANALYZER_ENDPOINT = os.getenv('OMOP_ANALYZER_ENDPOINT', 'NO OMOP_ANALYZER_ENDPOINT DEFINED')
 OMOP_TARGET_VOCAB_VERSION = os.getenv('OMOP_TARGET_VOCAB_VERSION', 'v5.0 27-AUG-25')
 OMOP_TARGET_CDM_VERSION = os.getenv('OMOP_TARGET_CDM_VERSION', '5.4')
+OMOP_VOCAB_GCS_PATH = os.getenv('OMOP_VOCAB_GCS_PATH', 'NO OMOP_VOCAB_GCS_PATH DEFINED')
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
@@ -16,8 +17,16 @@ PIPELINE_ERROR_STRING = "error"
 PIPELINE_DAG_FAIL_MESSAGE = "DAG failed"
 
 DEFAULT_CONNECTION_TIMEOUT_SEC = 60
-VOCAB_TIME_MIN = 180
-VOCAB_TIMEOUT_SEC = 180 * 60
+VOCAB_TIME_MIN = 60
+VOCAB_TIMEOUT_SEC = VOCAB_TIME_MIN * 60
+VOCAB_HARMONIZATION_RETRYS = 60
+
+# Vocabulary harmonization step constants
+SOURCE_TARGET = "Map source concepts to updated target codes"
+TARGET_REMAP = "Remap non-standard targets to new standard targets"
+TARGET_REPLACEMENT = "Replace non-standard targets with new standard targets"
+DOMAIN_CHECK = "Check for latest domain and update if needed"
+OMOP_ETL = "OMOP to OMOP ETL"
 
 VOCABULARY_TABLES = [
     "concept",
@@ -42,7 +51,6 @@ VOCAB_HARMONIZED_TABLES = [
     "note",
     "specimen"
 ]
-
 
 CONDITION_ERA = "condition_era"
 DRUG_ERA = "drug_era"
