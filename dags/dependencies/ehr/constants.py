@@ -23,10 +23,12 @@ VOCAB_HARMONIZATION_RETRYS = 60
 
 # Vocabulary harmonization step constants
 SOURCE_TARGET = "Map source concepts to updated target codes"
+DOMAIN_CHECK = "Check for latest domain and update if needed"
 TARGET_REMAP = "Remap non-standard targets to new standard targets"
 TARGET_REPLACEMENT = "Replace non-standard targets with new standard targets"
-DOMAIN_CHECK = "Check for latest domain and update if needed"
 OMOP_ETL = "OMOP to OMOP ETL"
+CONSOLIDATE_ETL = "Consolidate ETL files"
+DEDUPLICATE_PRIMARY_KEYS = "Deduplicate primary keys in ETL files"
 
 VOCABULARY_TABLES = [
     "concept",
@@ -81,6 +83,8 @@ class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"
     FIXED_FILES = f"{ARTIFACTS}fixed_files/"
     CONVERTED_FILES = f"{ARTIFACTS}converted_files/"
+    HARMONIZED_FILES = f"{ARTIFACTS}harmonized_files/"
+    OMOP_ETL = f"{ARTIFACTS}omop_etl/"
     CREATED_FILES = f"{ARTIFACTS}created_files/"
     REPORT = f"{ARTIFACTS}delivery_report/"
     REPORT_TMP = f"{ARTIFACTS}delivery_report/tmp/"
