@@ -626,7 +626,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"Unable to perform final cleanup: {e}") from e
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed",execution_timeout=timedelta(minutes=45))
 def dqd(site_to_process: tuple[str, str]) -> None:
 
     site, delivery_date = site_to_process
@@ -640,7 +640,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_BUCKET.value]
         cdm_source_name = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value]
         artifact_path = constants.ArtifactPaths.DQD.value
-        gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
+        gcs_artifact_path = os.path.join(gcs_bucket, delivery_date, artifact_path)
         cdm_version = constants.OMOP_TARGET_CDM_VERSION
 
         analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path, cdm_version=cdm_version, cdm_source_name=cdm_source_name)
@@ -650,7 +650,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
         raise Exception(error_msg) from e
     
 # @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
-# def run_achilles(site_to_process: tuple[str, str]) -> None:
+# def achilles(site_to_process: tuple[str, str]) -> None:
 
 #     site, delivery_date = site_to_process
 #     bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
@@ -766,4 +766,4 @@ with dag:
     load_to_bigquery_group >> derived_data >> cleanup 
     
     # Run analytics tasks
-    cleanup >> dqd >> all_done
+    cleanup >> run_dqd >> all_done
