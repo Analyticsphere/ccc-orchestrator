@@ -626,7 +626,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"Unable to perform final cleanup: {e}") from e
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed",execution_timeout=timedelta(minutes=45))
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed",execution_timeout=timedelta(minutes=135))
 def dqd(site_to_process: tuple[str, str]) -> None:
 
     site, delivery_date = site_to_process
