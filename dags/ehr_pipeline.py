@@ -626,11 +626,11 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"Unable to perform final cleanup: {e}") from e
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed",execution_timeout=timedelta(minutes=135))
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
 def dqd(site_to_process: tuple[str, str]) -> None:
 
     site, delivery_date = site_to_process
-    bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
+    bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))
 
     try:
         utils.logger.info(f"Triggering DQD checks for {site} data delivered on {delivery_date}")
@@ -643,33 +643,20 @@ def dqd(site_to_process: tuple[str, str]) -> None:
         gcs_artifact_path = os.path.join(gcs_bucket, delivery_date, artifact_path)
         cdm_version = constants.OMOP_TARGET_CDM_VERSION
 
-        analysis.run_dqd(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path, cdm_version=cdm_version, cdm_source_name=cdm_source_name)
+        # Execute DQD via Cloud Run Job
+        analysis.run_dqd_job(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            gcs_artifact_path=gcs_artifact_path,
+            cdm_version=cdm_version,
+            cdm_source_name=cdm_source_name,
+            context=get_current_context()
+        )
+
     except Exception as e:
         error_msg = f"Unable to run DQD: {e}"
         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
         raise Exception(error_msg) from e
-    
-# @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
-# def achilles(site_to_process: tuple[str, str]) -> None:
-
-#     site, delivery_date = site_to_process
-#     bq.bq_log_running(site, delivery_date, utils.get_run_id(get_current_context()))  
-
-#     try:
-#         utils.logger.info(f"Triggering Achilles run for {site} data delivered on {delivery_date}")
-
-#         project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-#         dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
-#         gcs_bucket = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.GCS_PATH.value]
-#         artifact_path = constants.ArtifactPaths.DQD.value
-#         gcs_artifact_path = os.path.join(gcs_bucket, artifact_path)
-
-#         # TODO pass gcs_artifact_path to run_achilles endpoint
-#         analysis.run_achilles(project_id=project_id, dataset_id=dataset_id, gcs_artifact_path=gcs_artifact_path)
-#     except Exception as e:
-#         error_msg = f"Unable to run Achilles: {e}"
-#         bq.bq_log_error(site, delivery_date, utils.get_run_id(get_current_context()), str(e))
-#         raise Exception(error_msg) from e
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
 def log_done() -> None:
