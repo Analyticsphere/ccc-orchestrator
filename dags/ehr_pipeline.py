@@ -460,11 +460,11 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
 
 
 @task(trigger_rule="none_failed")
-def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
+def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     """
-    Perform final data cleanup here.
+    Perform data cleanup here.
     """
-    utils.logger.info("Executing final cleanup tasks")
+    utils.logger.info("Executing data cleanup tasks")
 
     for site, delivery_date in sites_to_process:
         config = SiteConfig(site=site)
@@ -541,6 +541,21 @@ def achilles(site_to_process: tuple[str, str]) -> None:
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
         context=TaskContext.get_context()
+    )
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@log_task_execution()
+def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+
+    utils.logger.info(f"Creating Atlas results tables for {site} data delivered on {delivery_date}")
+
+    # Create Atlas results tables via API endpoint
+    analysis.create_atlas_results_tables(
+        project_id=config.project_id,
+        cdm_dataset_id=config.cdm_dataset_id,
+        atlas_results_dataset_id=config.atlas_results_dataset_id
     )
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
@@ -632,7 +647,7 @@ with dag:
 
     # After files have been harmonized, populate derived data
     derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
-    cleanup = final_cleanup(sites_to_process=unprocessed_sites)
+    clean = cleanup(sites_to_process=unprocessed_sites)
 
     # Run Data Quality Dashboard after loading data
     run_dqd = dqd.expand(site_to_process=unprocessed_sites)
@@ -640,21 +655,24 @@ with dag:
     # Run Achilles analyses after loading data
     run_achilles = achilles.expand(site_to_process=unprocessed_sites)
 
+    # Create Atlas results tables after analyses complete
+    create_atlas_tables = atlas_results_tables.expand(site_to_process=unprocessed_sites)
+
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
-    
+
     # Set task dependencies
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
-    
+
     # Vocab harmonization task group executes after file upgrade
     upgrade_file >> vocab_harmonization_group
-    
+
     # BigQuery loading task group executes after vocab harmonization
     vocab_harmonization_group >> load_to_bigquery_group
-    
-    # Continue with remaining tasks loading dataset
-    load_to_bigquery_group >> derived_data >> cleanup
 
-    # Run analytics tasks in parallel
-    cleanup >> [run_dqd, run_achilles] >> all_done
+    # Continue with remaining tasks loading dataset
+    load_to_bigquery_group >> derived_data >> clean
+
+    # Run analytics tasks in parallel, then create Atlas tables
+    clean >> [run_dqd, run_achilles] >> create_atlas_tables >> all_done

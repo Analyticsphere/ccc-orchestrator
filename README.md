@@ -99,7 +99,7 @@ Load to BigQuery (TaskGroup: load_to_bigquery):
 
 Post-load:
 - derived_data_tables: Populate observation_period, condition_era, drug_era
-- final_cleanup: Generate delivery report, create any missing OMOP tables, populate cdm_source, and mark complete
+- cleanup: Generate delivery report, create any missing OMOP tables, populate cdm_source, and mark complete
 - log_done: Final guard that marks the DAG failed if any prior tasks failed (and logs a DAG failure entry)
 
 ## Error Handling and Logging

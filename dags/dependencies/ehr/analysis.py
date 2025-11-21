@@ -1,5 +1,5 @@
 from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator  # type: ignore
-from dependencies.ehr import utils
+from dependencies.ehr import constants, utils
 
 
 def run_dqd_job(
@@ -105,3 +105,45 @@ def run_achilles_job(
     # Execute the Cloud Run Job
     operator.execute(context=context)
     utils.logger.info(f"Achilles Cloud Run Job completed successfully for {project_id}.{dataset_id}")
+
+
+def create_atlas_results_tables(
+    project_id: str,
+    cdm_dataset_id: str,
+    atlas_results_dataset_id: str
+) -> None:
+    """
+    Create Atlas results tables in BigQuery by calling the OMOP analyzer API.
+
+    This function calls the create_atlas_results_tables endpoint which executes
+    SQL to create the necessary tables for storing Atlas/Achilles results.
+
+    Args:
+        project_id: Google Cloud project ID
+        cdm_dataset_id: BigQuery CDM dataset ID
+        atlas_results_dataset_id: BigQuery dataset ID where Atlas results tables will be created
+
+    Raises:
+        Exception: If API call fails
+    """
+    utils.logger.info(f"Creating Atlas results tables in {project_id}.{atlas_results_dataset_id}")
+
+    # Call the API endpoint
+    response = utils.make_api_call(
+        url=constants.OMOP_ANALYZER_ENDPOINT,
+        endpoint="create_atlas_results_tables",
+        method="post",
+        json_data={
+            "project_id": project_id,
+            "cdm_dataset_id": cdm_dataset_id,
+            "atlas_results_dataset_id": atlas_results_dataset_id
+        },
+        timeout=300  # 5 minute timeout
+    )
+
+    if response and response.get('status') == 'success':
+        utils.logger.info(f"Atlas results tables created successfully in {project_id}.{atlas_results_dataset_id}")
+    else:
+        error_msg = f"Failed to create Atlas results tables: {response}"
+        utils.logger.error(error_msg)
+        raise Exception(error_msg)
