@@ -218,7 +218,7 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.SOURCE_TARGET
     )
 
@@ -243,7 +243,7 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.TARGET_REMAP
     )
 
@@ -268,7 +268,7 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.TARGET_REPLACEMENT
     )
 
@@ -293,7 +293,7 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.DOMAIN_CHECK
     )
 
@@ -318,7 +318,7 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.OMOP_ETL
     )
 
@@ -338,7 +338,7 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
         file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
         site=site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.CONSOLIDATE_ETL
     )
 
@@ -358,7 +358,7 @@ def harmonize_vocab_primary_keys_dedup(site_to_process: tuple[str, str]) -> None
         file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
         site=site,
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         step=constants.DEDUPLICATE_PRIMARY_KEYS
     )
 
@@ -373,7 +373,7 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
     config = SiteConfig(site=site)
 
     # Delete all tables within the BigQuery dataset.
-    bq.prep_dataset(project_id=config.project_id, dataset_id=config.dataset_id)
+    bq.prep_dataset(project_id=config.project_id, dataset_id=config.cdm_dataset_id)
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
@@ -389,7 +389,7 @@ def load_harmonized_tables(site_to_process: tuple[str, str]) -> None:
         gcs_bucket=config.gcs_bucket,
         delivery_date=delivery_date,
         project_id=config.project_id,
-        dataset_id=config.dataset_id
+        dataset_id=config.cdm_dataset_id
     )
     
 
@@ -409,7 +409,7 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
                 vocab_version=constants.OMOP_TARGET_VOCAB_VERSION,
                 table_file_name=vocab_table,
                 project_id=config.project_id,
-                dataset_id=config.dataset_id
+                dataset_id=config.cdm_dataset_id
             )
 
 
@@ -435,7 +435,7 @@ def load_remaining(file_config_dict: dict) -> None:
         bq.load_individual_parquet_to_bq(
             file_path=fc.file_path,
             project_id=config.project_id,
-            dataset_id=config.dataset_id,
+            dataset_id=config.cdm_dataset_id,
             table_name=fc.table_name,
             write_type=constants.BQWriteTypes.PROCESSED_FILE
         )
@@ -454,7 +454,7 @@ def derived_data_tables(site_to_process: tuple[str, str]) -> None:
             delivery_date=delivery_date,
             table_name=dervied_table,
             project_id=config.project_id,
-            dataset_id=config.dataset_id,
+            dataset_id=config.cdm_dataset_id,
             vocab_version=constants.OMOP_TARGET_VOCAB_VERSION
         )
 
@@ -480,7 +480,7 @@ def final_cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             # Create empty tables for OMOP files not provided in delivery
             omop.create_missing_omop_tables(
                 project_id=config.project_id,
-                dataset_id=config.dataset_id,
+                dataset_id=config.cdm_dataset_id,
                 omop_version=constants.OMOP_TARGET_CDM_VERSION
             )
 
@@ -512,7 +512,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
     # Execute DQD via Cloud Run Job
     analysis.run_dqd_job(
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
@@ -536,7 +536,7 @@ def achilles(site_to_process: tuple[str, str]) -> None:
     # Execute Achilles via Cloud Run Job
     analysis.run_achilles_job(
         project_id=config.project_id,
-        dataset_id=config.dataset_id,
+        dataset_id=config.cdm_dataset_id,
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,

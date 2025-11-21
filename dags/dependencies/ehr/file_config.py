@@ -13,7 +13,8 @@ class FileConfig:
         self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
         self.gcs_bucket = self.site_config[constants.FileConfig.GCS_BUCKET.value]
         self.file_delivery_format = self.site_config[constants.FileConfig.FILE_DELIVERY_FORMAT.value]
-        self.bq_dataset = self.site_config[constants.FileConfig.BQ_DATASET.value]
+        self.cdm_bq_dataset = self.site_config[constants.FileConfig.CDM_BQ_DATASET.value]
+        self.atlas_results_bq_dataset = self.site_config[constants.FileConfig.ATLAS_RESULTS_BQ_DATASET.value]
         self.omop_version = self.site_config[constants.FileConfig.OMOP_VERSION.value]
         self.file_path = f"{self.gcs_bucket}/{self.delivery_date}/{self.source_file}"
         self.date_format = self.site_config.get(constants.FileConfig.DATE_FORMAT.value, None)
@@ -33,7 +34,8 @@ class FileConfig:
             constants.FileConfig.FILE_DELIVERY_FORMAT.value: self.file_delivery_format,
             constants.FileConfig.PROJECT_ID.value: self.project_id,
             constants.FileConfig.GCS_BUCKET.value: self.gcs_bucket,
-            constants.FileConfig.BQ_DATASET.value: self.bq_dataset,
+            constants.FileConfig.CDM_BQ_DATASET.value: self.cdm_bq_dataset,
+            constants.FileConfig.ATLAS_RESULTS_BQ_DATASET.value: self.atlas_results_bq_dataset,
             constants.FileConfig.OMOP_VERSION.value: self.omop_version,
             constants.FileConfig.FILE_PATH.value: self.file_path,
             constants.FileConfig.DATE_FORMAT.value: self.date_format,
