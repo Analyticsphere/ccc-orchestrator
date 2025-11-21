@@ -39,7 +39,7 @@ def run_dqd_job(
             'container_overrides': [{
                 'env': [
                     {'name': 'PROJECT_ID', 'value': project_id},
-                    {'name': 'DATASET_ID', 'value': dataset_id},
+                    {'name': 'CDM_DATASET_ID', 'value': dataset_id},
                     {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path},
                     {'name': 'CDM_VERSION', 'value': cdm_version},
                     {'name': 'CDM_SOURCE_NAME', 'value': cdm_source_name}
@@ -92,7 +92,7 @@ def run_achilles_job(
             'container_overrides': [{
                 'env': [
                     {'name': 'PROJECT_ID', 'value': project_id},
-                    {'name': 'DATASET_ID', 'value': dataset_id},
+                    {'name': 'CDM_DATASET_ID', 'value': dataset_id},
                     {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path},
                     {'name': 'CDM_VERSION', 'value': cdm_version},
                     {'name': 'CDM_SOURCE_NAME', 'value': cdm_source_name}
