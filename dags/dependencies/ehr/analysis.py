@@ -1,7 +1,5 @@
-import time
+from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator  # type: ignore
 from dependencies.ehr import utils
-from dependencies.ehr import constants
-from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
 
 
 def run_dqd_job(
@@ -52,7 +50,7 @@ def run_dqd_job(
     )
 
     # Execute the Cloud Run Job
-    operator.execute(context)
+    operator.execute(context=context)
     utils.logger.info(f"DQD Cloud Run Job completed successfully for {project_id}.{dataset_id}")
 
 
@@ -105,5 +103,5 @@ def run_achilles_job(
     )
 
     # Execute the Cloud Run Job
-    operator.execute(context)
+    operator.execute(context=context)
     utils.logger.info(f"Achilles Cloud Run Job completed successfully for {project_id}.{dataset_id}")

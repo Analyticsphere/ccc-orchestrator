@@ -1,17 +1,20 @@
 from datetime import datetime
 
 from dependencies.ehr import constants, utils
+from dependencies.ehr.dag_helpers import SiteConfig
 
 
 def generate_report_json(site: str, delivery_date: str) -> dict:
     # Generate final data delivery report
+    config = SiteConfig(site=site)
+
     report_data = {
         "site": site,
-        "gcs_bucket": utils.get_site_bucket(site),
+        "gcs_bucket": config.gcs_bucket,
         "delivery_date": delivery_date,
-        "site_display_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
-        "file_delivery_format": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.FILE_DELIVERY_FORMAT.value],
-        "delivered_cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
+        "site_display_name": config.display_name,
+        "file_delivery_format": config.file_delivery_format,
+        "delivered_cdm_version": config.omop_version,
         "target_vocabulary_version": constants.OMOP_TARGET_VOCAB_VERSION,
         "target_cdm_version": constants.OMOP_TARGET_CDM_VERSION,
     }
@@ -19,12 +22,11 @@ def generate_report_json(site: str, delivery_date: str) -> dict:
     return report_data
 
 def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
-    project_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.PROJECT_ID.value]
-    dataset_id = utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.BQ_DATASET.value]
+    config = SiteConfig(site=site)
 
     # Create JSON with data needed to populate a blank cdm_source table
     cdm_source = {
-        "cdm_source_name": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.DISPLAY_NAME.value],
+        "cdm_source_name": config.display_name,
         "cdm_source_abbreviation": site,
         "cdm_holder": "NIH/NCI Connect for Cancer Prevention Study",
         "source_description": f"Electronic Health Record (EHR) data from {site}",
@@ -32,10 +34,10 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
         "cdm_etl_reference": "",
         "source_release_date": delivery_date,
         "cdm_release_date": datetime.today().strftime('%Y-%m-%d'),
-        "cdm_version": utils.get_site_config_file()[constants.FileConfig.SITE.value][site][constants.FileConfig.OMOP_VERSION.value],
-        "gcs_bucket": utils.get_site_bucket(site),
-        "project_id": project_id,
-        "dataset_id": dataset_id
+        "cdm_version": config.omop_version,
+        "gcs_bucket": config.gcs_bucket,
+        "project_id": config.project_id,
+        "dataset_id": config.dataset_id
     }
 
     return cdm_source

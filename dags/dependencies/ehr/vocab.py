@@ -1,4 +1,4 @@
-from dependencies.ehr import utils, constants
+from dependencies.ehr import constants, utils
 
 
 def load_vocabulary_table_gcs_to_bq(vocab_version: str, table_file_name: str, project_id: str, dataset_id: str) -> None:

@@ -1,5 +1,5 @@
-from enum import Enum
 import os
+from enum import Enum
 
 # Environmental variables from Airflow/Cloud Composer
 OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSOR_ENDPOINT DEFINED')

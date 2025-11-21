@@ -3,10 +3,11 @@ from pathlib import Path
 
 from dependencies.ehr import constants, utils
 
+
 class FileConfig:
     def __init__(self, site: str, delivery_date: str, source_file: str):
         self.site = site
-        self.site_config = utils.get_site_config_file()[constants.FileConfig.SITE.value][site]
+        self.site_config = utils.get_site_config(site=site)
         self.source_file = source_file
         self.delivery_date = delivery_date
         self.project_id = self.site_config[constants.FileConfig.PROJECT_ID.value]
@@ -40,6 +41,27 @@ class FileConfig:
             constants.FileConfig.OVERWRITE_SITE_VOCAB_WITH_STANDARD.value: self.overwrite_site_vocab_with_standard,
             constants.FileConfig.TABLE_NAME.value: self.table_name
         }
+
+    @classmethod
+    def from_dict(cls, config_dict: dict) -> 'FileConfig':
+        """
+        Reconstruct a FileConfig object from a dictionary.
+
+        This is useful when Airflow passes serialized file configs between tasks.
+
+        Args:
+            config_dict: Dictionary containing file configuration (from to_dict())
+
+        Returns:
+            FileConfig object with all properties populated
+        """
+        # Create instance using the basic constructor parameters
+        instance = cls(
+            site=config_dict[constants.FileConfig.SITE.value],
+            delivery_date=config_dict[constants.FileConfig.DELIVERY_DATE.value],
+            source_file=config_dict[constants.FileConfig.SOURCE_FILE.value]
+        )
+        return instance
 
     def __repr__(self):
         return str(self.to_dict())
