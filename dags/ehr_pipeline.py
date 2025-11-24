@@ -345,22 +345,49 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
 @log_task_execution()
-def harmonize_vocab_primary_keys_dedup(site_to_process: tuple[str, str]) -> None:
+def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[dict]:
     """
-    Step 7: Identify and correct duplicate primary keys in ETL files after vocabulary harmonization.
-    This occurs once per site; not per file
+    Step 7: Discover all tables that need primary key deduplication.
+    This occurs once per site and returns a list of table configurations for parallel processing.
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Execute primary key deduplication step on the site's OMOP-to-OMOP ETL files
-    vocab.harmonize_vocab_step(
-        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
+    # Discover all tables that need deduplication
+    table_configs = vocab.discover_tables_for_dedup(
+        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery",
         site=site,
         project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id,
-        step=constants.DEDUPLICATE_PRIMARY_KEYS
+        dataset_id=config.cdm_dataset_id
     )
+
+    return table_configs
+
+
+@task(trigger_rule="none_failed")
+def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]:
+    """
+    Flatten the list of table configs from all sites into a single list.
+    Each site returns a list of table configs, this combines them all.
+    """
+    flattened = []
+    for site_tables in table_configs_by_site:
+        if site_tables:  # Skip empty lists
+            flattened.extend(site_tables)
+
+    utils.logger.info(f"Flattened {len(flattened)} table(s) from {len(table_configs_by_site)} site(s)")
+    return flattened
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+@log_task_execution()
+def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
+    """
+    Step 8: Deduplicate primary keys for a single table.
+    This runs in parallel for each table that needs deduplication.
+    """
+    # Deduplicate primary keys for this specific table
+    vocab.deduplicate_single_table(table_config)
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
@@ -614,7 +641,7 @@ with dag:
     fix_data_file = normalize_file.expand(file_config_dict=file_list)
     upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
 
-    # Vocab harmonization task group with 5 sequential steps
+    # Vocab harmonization task group with 8 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
         # Each step is expanded across all file configs and executes in order
         vocab_step1_source_target = harmonize_vocab_source_target.expand(file_config_dict=file_list)
@@ -623,10 +650,18 @@ with dag:
         vocab_step4_domain_check = harmonize_vocab_domain_check.expand(file_config_dict=file_list)
         vocab_step5_omop_etl = harmonize_vocab_omop_etl.expand(file_config_dict=file_list)
         vocab_step6_consolidate = harmonize_vocab_consolidate.expand(site_to_process=unprocessed_sites)
-        vocab_step7_deduplicate = harmonize_vocab_primary_keys_dedup.expand(site_to_process=unprocessed_sites)
 
-        # Chain the 6 vocabulary harmonization steps sequentially within the group
-        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl >> vocab_step6_consolidate >> vocab_step7_deduplicate
+        # Step 7: Discover tables for deduplication (per site)
+        vocab_step7_discover = harmonize_vocab_discover_tables.expand(site_to_process=unprocessed_sites)
+
+        # Step 7b: Flatten all table configs from all sites into a single list
+        vocab_step7b_flatten = flatten_table_configs(table_configs_by_site=vocab_step7_discover)
+
+        # Step 8: Deduplicate each table in parallel (mapped per table)
+        vocab_step8_deduplicate = harmonize_vocab_deduplicate_table.expand(table_config=vocab_step7b_flatten)
+
+        # Chain the 8 vocabulary harmonization steps sequentially within the group
+        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl >> vocab_step6_consolidate >> vocab_step7_discover >> vocab_step7b_flatten >> vocab_step8_deduplicate
 
     # BigQuery loading task group
     with TaskGroup(group_id="load_to_bigquery", tooltip="Load all data to BigQuery") as load_to_bigquery_group:

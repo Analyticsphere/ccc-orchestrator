@@ -95,7 +95,8 @@ Vocabulary harmonization (TaskGroup: vocab_harmonization):
 4. harmonize_vocab_domain_check: Check and update domains as needed
 5. harmonize_vocab_omop_etl: OMOP→OMOP ETL per table
 6. harmonize_vocab_consolidate: Consolidate ETL outputs per site
-7. harmonize_vocab_primary_keys_dedup: Deduplicate ETL primary keys per site
+7. harmonize_vocab_discover_tables: Discover all tables needing deduplication (per site, returns list)
+8. harmonize_vocab_deduplicate_table: Deduplicate primary keys for a single table (parallel execution per table)
 
 Load to BigQuery (TaskGroup: load_to_bigquery):
 - prepare_bq: Clear prior tables in dataset
@@ -181,7 +182,7 @@ Optional quick checks:
 - Harmonization applies only to clinical tables listed in `constants.VOCAB_HARMONIZED_TABLES`.
 - If `overwrite_site_vocab_with_standard` is false, the site-provided vocab tables will overwrite standard vocab tables loaded by the pipeline.
 - GCS bucket names in config should not include `gs://`; the pipeline will add URI prefixes where needed.
-- The target vocabulary files should be present under `OMOP_VOCAB_GCS_PATH` and identified by `OMOP_TARGET_VOCAB_VERSION`.
+- The target vocabulary files should be present in the GCS bucket specified in `OMOP_VOCAB_GCS_PATH` and in a folder with the version specified in `OMOP_TARGET_VOCAB_VERSION`.
 - **OHDSI Tasks**: DQD and Achilles tasks run in parallel after the cleanup task completes. Both can take 2+ hours and execute as Cloud Run Jobs to avoid Airflow task timeout limits.
 - **Atlas Results Tables**: The `atlas_results_tables` task creates necessary BigQuery tables for OHDSI Atlas integration. It runs after both DQD and Achilles complete.
 - **Artifact Storage**: DQD and Achilles results are stored in GCS under `{gcs_bucket}/{delivery_date}/dqd/` and `{gcs_bucket}/{delivery_date}/achilles/` respectively, and also loaded into BigQuery tables.
