@@ -106,6 +106,9 @@ def get_site_list() -> list[str]:
 def get_most_recent_folder(site: str) -> str:
     """
     Find the most recent date-formatted folder in a GCS bucket.
+
+    Raises:
+        Exception: If no date-formatted folders are found in the bucket
     """
     gcs_bucket = get_site_bucket(site)
 
@@ -114,7 +117,7 @@ def get_most_recent_folder(site: str) -> str:
 
     # Get all blobs
     blobs = list(bucket.list_blobs())
-    
+
     # Extract unique top-level folder names
     top_level_folders = set()
     for blob in blobs:
@@ -122,24 +125,27 @@ def get_most_recent_folder(site: str) -> str:
         parts = blob.name.split('/')
         if parts and parts[0]:  # Make sure we have a non-empty first segment
             top_level_folders.add(parts[0])
-    
+
     most_recent_date = None
     most_recent_folder = None
-    
+
     # Check each folder
     for folder_name in top_level_folders:
         try:
             # Try to parse the folder name as a date
             folder_date = datetime.strptime(folder_name, '%Y-%m-%d')
-            
+
             # Update most recent if this is the first or a more recent date
             if most_recent_date is None or folder_date > most_recent_date:
                 most_recent_date = folder_date
                 most_recent_folder = folder_name
-                
+
         except ValueError:
             # Skip folders that don't match our date format
             continue
+
+    if most_recent_folder is None:
+        raise Exception(f"No date-formatted folders found in bucket {gcs_bucket} for site {site}")
 
     return most_recent_folder
 

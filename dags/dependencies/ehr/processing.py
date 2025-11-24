@@ -1,4 +1,4 @@
-from dependencies.ehr import utils, constants
+from dependencies.ehr import constants, utils
 
 
 def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
@@ -6,9 +6,9 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
     Get a list of files from a site's latest delivery
     """
     try:
-        gcs_bucket = utils.get_site_bucket(site)
+        gcs_bucket = utils.get_site_bucket(site=site)
         full_path = f"{gcs_bucket}/{delivery_date}"
-        create_artifact_buckets(full_path)
+        create_artifact_buckets(delivery_bucket=full_path)
 
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
 

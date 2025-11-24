@@ -1,5 +1,5 @@
-from enum import Enum
 import os
+from enum import Enum
 
 # Environmental variables from Airflow/Cloud Composer
 OMOP_PROCESSOR_ENDPOINT = os.getenv('OMOP_PROCESSOR_ENDPOINT', 'NO OMOP_PROCESSOR_ENDPOINT DEFINED')
@@ -68,7 +68,8 @@ class FileConfig(str, Enum):
     GCS_BUCKET = "gcs_bucket"
     FILE_DELIVERY_FORMAT = "file_delivery_format"
     PROJECT_ID = "project_id"
-    BQ_DATASET = "bq_dataset"
+    CDM_BQ_DATASET = "cdm_bq_dataset"
+    ATLAS_RESULTS_BQ_DATASET = "atlas_results_bq_dataset"
     OMOP_VERSION = "omop_version"
     SITE = "site"
     DELIVERY_DATE = "delivery_date"
