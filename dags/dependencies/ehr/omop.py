@@ -55,20 +55,45 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
         }
     )
 
-def create_derived_data_table(site: str, gcs_bucket: str, delivery_date: str, table_name: str, project_id: str, dataset_id: str, vocab_version: str) -> None:
-    utils.logger.info(f"Generating derived data table {table_name} for {delivery_date} delivery from {site}")
+def generate_derived_table_from_harmonized(site: str, gcs_bucket: str, delivery_date: str, table_name: str, vocab_version: str) -> None:
+    """
+    Generate a derived data table from HARMONIZED data (post-vocabulary harmonization).
+
+    This function calls the file processor endpoint that generates derived tables using DuckDB
+    from harmonized Parquet files. The derived table is written to artifacts/derived_files/
+    and will be loaded to BigQuery in a separate step.
+    """
+    utils.logger.info(f"Generating derived data table {table_name} from harmonized data for {delivery_date} delivery from {site}")
 
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
-        endpoint="populate_derived_data",
+        endpoint="generate_derived_tables_from_harmonized",
         json_data={
             "site": site,
             "gcs_bucket": gcs_bucket,
             "delivery_date": delivery_date,
             "table_name": table_name,
-            "project_id": project_id,
-            "dataset_id": dataset_id,
             "vocab_version": vocab_version
+        }
+    )
+
+def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project_id: str, dataset_id: str) -> None:
+    """
+    Load all derived table Parquet files from artifacts/derived_files/ to BigQuery.
+
+    This function discovers all derived table files in the derived_files directory and
+    loads them to their corresponding BigQuery tables.
+    """
+    utils.logger.info(f"Loading derived tables from artifacts/derived_files/ to BigQuery for {delivery_date} delivery")
+
+    utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
+        endpoint="load_derived_tables_to_bq",
+        json_data={
+            "gcs_bucket": gcs_bucket,
+            "delivery_date": delivery_date,
+            "project_id": project_id,
+            "dataset_id": dataset_id
         }
     )
 

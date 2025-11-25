@@ -345,23 +345,96 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
 @log_task_execution()
-def harmonize_vocab_primary_keys_dedup(site_to_process: tuple[str, str]) -> None:
+def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[dict]:
     """
-    Step 7: Identify and correct duplicate primary keys in ETL files after vocabulary harmonization.
-    This occurs once per site; not per file
+    Step 7: Discover all tables that need primary key deduplication.
+    This occurs once per site and returns a list of table configurations for parallel processing.
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Execute primary key deduplication step on the site's OMOP-to-OMOP ETL files
-    vocab.harmonize_vocab_step(
-        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
+    # Discover all tables that need deduplication
+    table_configs = vocab.discover_tables_for_dedup(
+        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery",
         site=site,
         project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id,
-        step=constants.DEDUPLICATE_PRIMARY_KEYS
+        dataset_id=config.cdm_dataset_id
     )
 
+    return table_configs
+
+
+@task(trigger_rule="none_failed")
+def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]:
+    """
+    Flatten the list of table configs from all sites into a single list.
+    Each site returns a list of table configs, this combines them all.
+    """
+    flattened = []
+    for site_tables in table_configs_by_site:
+        if site_tables:  # Skip empty lists
+            flattened.extend(site_tables)
+
+    utils.logger.info(f"Flattened {len(flattened)} table(s) from {len(table_configs_by_site)} site(s)")
+    return flattened
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+@log_task_execution()
+def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
+    """
+    Step 8: Deduplicate primary keys for a single table.
+    This runs in parallel for each table that needs deduplication.
+    """
+    # Deduplicate primary keys for this specific table
+    vocab.deduplicate_single_table(table_config)
+
+
+@task
+def create_derived_table_configs(sites_to_process: list[tuple[str, str]]) -> list[dict]:
+    """
+    Create a configuration dictionary for each site-table combination.
+
+    For example, if we have 2 sites and 3 derived tables, this will create 6 configs
+    (one for each combination), allowing for parallel processing of each table.
+    """
+    configs = []
+    for site, delivery_date in sites_to_process:
+        for table_name in constants.DERIVED_DATA_TABLES:
+            configs.append({
+                'site': site,
+                'delivery_date': delivery_date,
+                'table_name': table_name
+            })
+    return configs
+
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
+@log_task_execution()
+def generate_single_derived_table(derived_config: dict) -> None:
+    """
+    Generate a single derived table from HARMONIZED data for a single site.
+
+    This task is called AFTER vocabulary harmonization is complete and reads from harmonized
+    Parquet files in omop_etl/. The derived table is written to derived_files/ and will be
+    loaded to BigQuery in the load_to_bigquery task group.
+
+    This task is expanded per site-table combination, allowing parallel processing.
+    For example: 2 sites × 3 tables = 6 parallel tasks.
+    """
+    site = derived_config['site']
+    delivery_date = derived_config['delivery_date']
+    table_name = derived_config['table_name']
+
+    config = SiteConfig(site=site)
+
+    omop.generate_derived_table_from_harmonized(
+        site=site,
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        table_name=table_name,
+        vocab_version=constants.OMOP_TARGET_VOCAB_VERSION
+    )
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 @log_task_execution()
@@ -369,7 +442,7 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
     """
     Deletes files and tables from previous pipeline runs.
     """
-    site, delivery_date = site_to_process
+    site, _ = site_to_process
     config = SiteConfig(site=site)
 
     # Delete all tables within the BigQuery dataset.
@@ -412,7 +485,6 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
                 dataset_id=config.cdm_dataset_id
             )
 
-
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed")
 @log_task_execution()
 def load_remaining(file_config_dict: dict) -> None:
@@ -440,24 +512,24 @@ def load_remaining(file_config_dict: dict) -> None:
             write_type=constants.BQWriteTypes.PROCESSED_FILE
         )
 
-
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed")
 @log_task_execution()
-def derived_data_tables(site_to_process: tuple[str, str]) -> None:
+def load_derived_tables(site_to_process: tuple[str, str]) -> None:
+    """
+    Load derived tables from derived_files/ to BigQuery.
+
+    This task discovers all derived table Parquet files in artifacts/derived_files/
+    and loads them to their corresponding BigQuery tables.
+    """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    for dervied_table in constants.DERIVED_DATA_TABLES:
-        omop.create_derived_data_table(
-            site=site,
-            gcs_bucket=config.gcs_bucket,
-            delivery_date=delivery_date,
-            table_name=dervied_table,
-            project_id=config.project_id,
-            dataset_id=config.cdm_dataset_id,
-            vocab_version=constants.OMOP_TARGET_VOCAB_VERSION
-        )
-
+    omop.load_derived_tables_to_bigquery(
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        project_id=config.project_id,
+        dataset_id=config.cdm_dataset_id
+    )
 
 @task(trigger_rule="none_failed")
 def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
@@ -614,7 +686,7 @@ with dag:
     fix_data_file = normalize_file.expand(file_config_dict=file_list)
     upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
 
-    # Vocab harmonization task group with 5 sequential steps
+    # Vocab harmonization task group with 8 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
         # Each step is expanded across all file configs and executes in order
         vocab_step1_source_target = harmonize_vocab_source_target.expand(file_config_dict=file_list)
@@ -623,30 +695,50 @@ with dag:
         vocab_step4_domain_check = harmonize_vocab_domain_check.expand(file_config_dict=file_list)
         vocab_step5_omop_etl = harmonize_vocab_omop_etl.expand(file_config_dict=file_list)
         vocab_step6_consolidate = harmonize_vocab_consolidate.expand(site_to_process=unprocessed_sites)
-        vocab_step7_deduplicate = harmonize_vocab_primary_keys_dedup.expand(site_to_process=unprocessed_sites)
 
-        # Chain the 6 vocabulary harmonization steps sequentially within the group
-        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl >> vocab_step6_consolidate >> vocab_step7_deduplicate
+        # Step 7: Discover tables for deduplication (per site)
+        vocab_step7_discover = harmonize_vocab_discover_tables.expand(site_to_process=unprocessed_sites)
+
+        # Step 7b: Flatten all table configs from all sites into a single list
+        vocab_step7b_flatten = flatten_table_configs(table_configs_by_site=vocab_step7_discover)
+
+        # Step 8: Deduplicate each table in parallel (mapped per table)
+        vocab_step8_deduplicate = harmonize_vocab_deduplicate_table.expand(table_config=vocab_step7b_flatten)
+
+        # Chain the 8 vocabulary harmonization steps sequentially within the group
+        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl >> vocab_step6_consolidate >> vocab_step7_discover >> vocab_step7b_flatten >> vocab_step8_deduplicate
+
+    # Derived table generation task group
+    with TaskGroup(group_id="generate_derived_tables", tooltip="Generate derived tables from harmonized data") as generate_derived_tables_group:
+        # Create configs for each site-table combination (e.g., 2 sites × 3 tables = 6 configs)
+        derived_configs = create_derived_table_configs(sites_to_process=unprocessed_sites)
+
+        # Generate each derived table in parallel (one task per site-table combination)
+        gen_derived = generate_single_derived_table.expand(derived_config=derived_configs)
+
+        # Chain the steps within the group
+        derived_configs >> gen_derived
 
     # BigQuery loading task group
     with TaskGroup(group_id="load_to_bigquery", tooltip="Load all data to BigQuery") as load_to_bigquery_group:
         # Prepare BigQuery by removing old tables
         clean_bq = prepare_bq.expand(site_to_process=unprocessed_sites)
-        
+
         # Load harmonized vocabulary tables
         load_harmonized = load_harmonized_tables.expand(site_to_process=unprocessed_sites)
-        
+
         # Load target vocabulary tables
         load_vocab = load_target_vocab.expand(site_to_process=unprocessed_sites)
-        
+
         # Load remaining OMOP data files
         load_others = load_remaining.expand(file_config_dict=file_list)
-        
-        # Chain the loading steps sequentially within the group
-        clean_bq >> load_harmonized >> load_vocab >> load_others
 
-    # After files have been harmonized, populate derived data
-    derived_data = derived_data_tables.expand(site_to_process=unprocessed_sites)
+        # Load derived tables from derived_files/
+        load_derived = load_derived_tables.expand(site_to_process=unprocessed_sites)
+
+        # Chain the loading steps sequentially within the group
+        clean_bq >> load_harmonized >> load_vocab >> load_others >> load_derived
+
     clean = cleanup(sites_to_process=unprocessed_sites)
 
     # Run Data Quality Dashboard after loading data
@@ -668,11 +760,14 @@ with dag:
     # Vocab harmonization task group executes after file upgrade
     upgrade_file >> vocab_harmonization_group
 
-    # BigQuery loading task group executes after vocab harmonization
-    vocab_harmonization_group >> load_to_bigquery_group
+    # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
+    vocab_harmonization_group >> generate_derived_tables_group
 
-    # Continue with remaining tasks loading dataset
-    load_to_bigquery_group >> derived_data >> clean
+    # BigQuery loading task group executes after derived tables are generated
+    generate_derived_tables_group >> load_to_bigquery_group
+
+    # Continue with remaining tasks after loading dataset
+    load_to_bigquery_group >> clean
 
     # Run analytics tasks in parallel, then create Atlas tables
     clean >> [run_dqd, run_achilles] >> create_atlas_tables >> all_done
