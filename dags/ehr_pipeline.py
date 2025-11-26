@@ -563,9 +563,10 @@ def load_derived_tables(site_to_process: tuple[str, str]) -> None:
 @task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     """
-    Perform data cleanup here.
+    Perform CDM setup and cleanup tasks after BigQuery loading.
+    Prepares the CDM dataset for DQD and Achilles analyses.
     """
-    utils.logger.info("Executing data cleanup tasks")
+    utils.logger.info("Executing CDM setup and cleanup tasks")
 
     for site, delivery_date in sites_to_process:
         config = SiteConfig(site=site)
@@ -589,11 +590,10 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             cdm_source_data = omop.generate_cdm_source_json(site=site, delivery_date=delivery_date)
             omop.populate_cdm_source(cdm_source_data=cdm_source_data)
 
-            # Add completed log entry to BigQuery tracking table
-            bq.bq_log_complete(site=site, delivery_date=delivery_date, run_id=run_id)
+            utils.logger.info(f"Final CDM cleanup completed for {site} delivery {delivery_date}")
         except Exception as e:
             bq.bq_log_error(site=site, delivery_date=delivery_date, run_id=run_id, message=str(e))
-            raise Exception(f"Unable to perform final cleanup: {e}") from e
+            raise Exception(f"Unable to perform CDM cleanup: {e}") from e
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
@@ -635,9 +635,11 @@ def achilles(site_to_process: tuple[str, str]) -> None:
     )
 
     # Execute Achilles via Cloud Run Job
+    # Achilles reads CDM data from cdm_dataset_id and writes results to atlas_results_dataset_id
     analysis.run_achilles_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
+        atlas_results_dataset_id=config.atlas_results_dataset_id,
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
@@ -658,6 +660,25 @@ def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
         cdm_dataset_id=config.cdm_dataset_id,
         atlas_results_dataset_id=config.atlas_results_dataset_id
     )
+
+@task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
+def mark_delivery_complete(sites_to_process: list[tuple[str, str]]) -> None:
+    """
+    Mark data deliveries as complete after all analyses (DQD, Achilles, Atlas) finish successfully.
+    This task logs completion status to BigQuery tracking table.
+    """
+    utils.logger.info("Marking deliveries as complete after all pipeline tasks and analyses finished")
+
+    for site, delivery_date in sites_to_process:
+        run_id = TaskContext.get_run_id()
+
+        try:
+            # Add completed log entry to BigQuery tracking table
+            bq.bq_log_complete(site=site, delivery_date=delivery_date, run_id=run_id)
+            utils.logger.info(f"Marked delivery complete for {site} delivery {delivery_date}")
+        except Exception as e:
+            bq.bq_log_error(site=site, delivery_date=delivery_date, run_id=run_id, message=str(e))
+            raise Exception(f"Unable to mark delivery as complete: {e}") from e
 
 @task(trigger_rule=TriggerRule.ALL_DONE, retries=0, execution_timeout=timedelta(minutes=10))
 def log_done() -> None:
@@ -779,6 +800,9 @@ with dag:
     # Create Atlas results tables after analyses complete
     create_atlas_tables = atlas_results_tables.expand(site_to_process=unprocessed_sites)
 
+    # Mark deliveries as complete after all analyses finish
+    mark_complete = mark_delivery_complete(sites_to_process=unprocessed_sites)
+
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
 
@@ -798,5 +822,5 @@ with dag:
     # Continue with remaining tasks after loading dataset
     load_to_bigquery_group >> clean
 
-    # Run analytics tasks in parallel, then create Atlas tables
-    clean >> [run_dqd, run_achilles] >> create_atlas_tables >> all_done
+    # Run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
+    clean >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done
