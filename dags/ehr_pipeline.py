@@ -8,6 +8,7 @@ import dependencies.ehr.constants as constants
 import dependencies.ehr.file_config as file_config
 import dependencies.ehr.omop as omop
 import dependencies.ehr.processing as processing
+import dependencies.ehr.processing_jobs as processing_jobs
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
 import dependencies.ehr.vocab as vocab
@@ -36,7 +37,7 @@ dag = DAG(
 )
 
 
-@task()
+@task(execution_timeout=timedelta(minutes=5))
 def check_api_health() -> None:
     """
     Task to verify EHR processing container is up.
@@ -53,7 +54,7 @@ def check_api_health() -> None:
         raise
 
 
-@task()
+@task(execution_timeout=timedelta(minutes=15))
 def id_sites_to_process() -> list[tuple[str, str]]:
     """
     Identify sites with unprocessed or errored deliveries.
@@ -76,7 +77,7 @@ def id_sites_to_process() -> list[tuple[str, str]]:
     return unprocessed_sites
 
 
-@task.short_circuit
+@task.short_circuit(execution_timeout=timedelta(minutes=5))
 def end_if_all_processed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     """
     Returns False (which skips downstream tasks) if there are no sites to process.
@@ -87,7 +88,7 @@ def end_if_all_processed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     return True
 
 
-@task()
+@task(execution_timeout=timedelta(minutes=15))
 def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed.
@@ -136,17 +137,24 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
     return file_configs
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def convert_file(file_config_dict: dict) -> None:
     """
-    Create optimized version of incoming EHR data file.
+    Create optimized version of incoming EHR data file via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
-    processing.process_file(file_type=fc.file_delivery_format, gcs_file_path=fc.file_path)
+    config = SiteConfig(site=fc.site)
+
+    processing_jobs.run_process_file_job(
+        file_type=fc.file_delivery_format,
+        gcs_file_path=fc.file_path,
+        project_id=config.project_id,
+        context=TaskContext.get_context()
+    )
 
 
-@task(max_active_tis_per_dag=24)
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def validate_file(file_config_dict: dict) -> None:
     """
@@ -161,28 +169,33 @@ def validate_file(file_config_dict: dict) -> None:
     )
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def normalize_file(file_config_dict: dict) -> None:
     """
-    Standardize OMOP data file structure.
+    Standardize OMOP data file structure via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
-    processing.normalize_parquet_file(
+    config = SiteConfig(site=fc.site)
+
+    processing_jobs.run_normalize_parquet_job(
         file_path=fc.file_path,
         cdm_version=fc.omop_version,
         date_format=fc.date_format,
-        datetime_format=fc.datetime_format
+        datetime_format=fc.datetime_format,
+        project_id=config.project_id,
+        context=TaskContext.get_context()
     )
 
 
-@task(max_active_tis_per_dag=24)
+@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def cdm_upgrade(file_config_dict: dict) -> None:
     """
-    Upgrade CDM version (currently supports 5.3 -> 5.4)
+    Upgrade CDM version (currently supports 5.3 -> 5.4) via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
+    config = SiteConfig(site=fc.site)
 
     if fc.omop_version == constants.OMOP_TARGET_CDM_VERSION:
         utils.logger.info(
@@ -190,10 +203,12 @@ def cdm_upgrade(file_config_dict: dict) -> None:
             f"upgrade target {constants.OMOP_TARGET_CDM_VERSION}; upgrade not needed"
         )
     else:
-        omop.upgrade_cdm(
+        processing_jobs.run_upgrade_cdm_job(
             file_path=fc.file_path,
             cdm_version=fc.omop_version,
-            target_cdm_version=constants.OMOP_TARGET_CDM_VERSION
+            target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
+            project_id=config.project_id,
+            context=TaskContext.get_context()
         )
 
 
@@ -201,7 +216,7 @@ def cdm_upgrade(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_source_target(file_config_dict: dict) -> None:
     """
-    Step 1: Execute source_target vocabulary harmonization.
+    Step 1: Execute source_target vocabulary harmonization via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -213,13 +228,14 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute source_target step
-    vocab.harmonize_vocab_step(
+    # Execute source_target step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.SOURCE_TARGET
+        step=constants.SOURCE_TARGET,
+        context=TaskContext.get_context()
     )
 
 
@@ -227,7 +243,7 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
     """
-    Step 2: Execute target_remap vocabulary harmonization.
+    Step 2: Execute target_remap vocabulary harmonization via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -238,13 +254,14 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute target_remap step
-    vocab.harmonize_vocab_step(
+    # Execute target_remap step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.TARGET_REMAP
+        step=constants.TARGET_REMAP,
+        context=TaskContext.get_context()
     )
 
 
@@ -252,7 +269,7 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
     """
-    Step 3: Execute target_replacement vocabulary harmonization.
+    Step 3: Execute target_replacement vocabulary harmonization via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -263,13 +280,14 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute target_replacement step
-    vocab.harmonize_vocab_step(
+    # Execute target_replacement step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.TARGET_REPLACEMENT
+        step=constants.TARGET_REPLACEMENT,
+        context=TaskContext.get_context()
     )
 
 
@@ -277,7 +295,7 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
     """
-    Step 4: Execute domain_check vocabulary harmonization.
+    Step 4: Execute domain_check vocabulary harmonization via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -288,13 +306,14 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute domain_check step
-    vocab.harmonize_vocab_step(
+    # Execute domain_check step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.DOMAIN_CHECK
+        step=constants.DOMAIN_CHECK,
+        context=TaskContext.get_context()
     )
 
 
@@ -302,7 +321,7 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
     """
-    Step 5: Execute omop_etl vocabulary harmonization and load to BigQuery.
+    Step 5: Execute omop_etl vocabulary harmonization via Cloud Run Job.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -313,13 +332,14 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute omop_etl step
-    vocab.harmonize_vocab_step(
+    # Execute omop_etl step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.OMOP_ETL
+        step=constants.OMOP_ETL,
+        context=TaskContext.get_context()
     )
 
 
@@ -327,19 +347,20 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
     """
-    Step 6: Combine and deduplicate ETL files after vocabulary harmonization.
+    Step 6: Combine and deduplicate ETL files after vocabulary harmonization via Cloud Run Job.
     This occurs once per site; not per file
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Execute consolidation step on the site's OMOP-to-OMOP ETL files
-    vocab.harmonize_vocab_step(
+    # Execute consolidation step via Cloud Run Job
+    processing_jobs.run_harmonize_vocab_job(
         file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
         site=site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        step=constants.CONSOLIDATE_ETL
+        step=constants.CONSOLIDATE_ETL,
+        context=TaskContext.get_context()
     )
 
 
@@ -347,24 +368,27 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 @log_task_execution()
 def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[dict]:
     """
-    Step 7: Discover all tables that need primary key deduplication.
+    Step 7: Discover all tables that need primary key deduplication via Cloud Run Job.
     This occurs once per site and returns a list of table configurations for parallel processing.
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Discover all tables that need deduplication
-    table_configs = vocab.discover_tables_for_dedup(
+    # Discover all tables that need deduplication via Cloud Run Job
+    table_configs = processing_jobs.run_discover_tables_job(
         file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery",
         site=site,
         project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id
+        dataset_id=config.cdm_dataset_id,
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        context=TaskContext.get_context()
     )
 
     return table_configs
 
 
-@task(trigger_rule="none_failed")
+@task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=15))
 def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]:
     """
     Flatten the list of table configs from all sites into a single list.
@@ -383,14 +407,17 @@ def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]
 @log_task_execution()
 def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
     """
-    Step 8: Deduplicate primary keys for a single table.
+    Step 8: Deduplicate primary keys for a single table via Cloud Run Job.
     This runs in parallel for each table that needs deduplication.
     """
-    # Deduplicate primary keys for this specific table
-    vocab.deduplicate_single_table(table_config)
+    # Deduplicate primary keys for this specific table via Cloud Run Job
+    processing_jobs.run_deduplicate_table_job(
+        table_config=table_config,
+        context=TaskContext.get_context()
+    )
 
 
-@task
+@task(execution_timeout=timedelta(minutes=5))
 def create_derived_table_configs(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Create a configuration dictionary for each site-table combination.
@@ -409,11 +436,11 @@ def create_derived_table_configs(sites_to_process: list[tuple[str, str]]) -> lis
     return configs
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def generate_single_derived_table(derived_config: dict) -> None:
     """
-    Generate a single derived table from HARMONIZED data for a single site.
+    Generate a single derived table from HARMONIZED data via Cloud Run Job.
 
     This task is called AFTER vocabulary harmonization is complete and reads from harmonized
     Parquet files in omop_etl/. The derived table is written to derived_files/ and will be
@@ -428,15 +455,17 @@ def generate_single_derived_table(derived_config: dict) -> None:
 
     config = SiteConfig(site=site)
 
-    omop.generate_derived_table_from_harmonized(
+    processing_jobs.run_generate_derived_table_job(
         site=site,
         gcs_bucket=config.gcs_bucket,
         delivery_date=delivery_date,
         table_name=table_name,
-        vocab_version=constants.OMOP_TARGET_VOCAB_VERSION
+        vocab_version=constants.OMOP_TARGET_VOCAB_VERSION,
+        project_id=config.project_id,
+        context=TaskContext.get_context()
     )
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def prepare_bq(site_to_process: tuple[str, str]) -> None:
     """
@@ -449,7 +478,7 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
     bq.prep_dataset(project_id=config.project_id, dataset_id=config.cdm_dataset_id)
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def load_harmonized_tables(site_to_process: tuple[str, str]) -> None:
     """
@@ -466,7 +495,7 @@ def load_harmonized_tables(site_to_process: tuple[str, str]) -> None:
     )
     
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution(skip_running_log=True)
 def load_target_vocab(site_to_process: tuple[str, str]) -> None:
     """
@@ -485,7 +514,7 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
                 dataset_id=config.cdm_dataset_id
             )
 
-@task(max_active_tis_per_dag=24, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def load_remaining(file_config_dict: dict) -> None:
     """
@@ -512,7 +541,7 @@ def load_remaining(file_config_dict: dict) -> None:
             write_type=constants.BQWriteTypes.PROCESSED_FILE
         )
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def load_derived_tables(site_to_process: tuple[str, str]) -> None:
     """
@@ -531,7 +560,7 @@ def load_derived_tables(site_to_process: tuple[str, str]) -> None:
         dataset_id=config.cdm_dataset_id
     )
 
-@task(trigger_rule="none_failed")
+@task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     """
     Perform data cleanup here.
@@ -615,7 +644,7 @@ def achilles(site_to_process: tuple[str, str]) -> None:
         context=TaskContext.get_context()
     )
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed")
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
     site, delivery_date = site_to_process
@@ -630,7 +659,7 @@ def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
         atlas_results_dataset_id=config.atlas_results_dataset_id
     )
 
-@task(trigger_rule=TriggerRule.ALL_DONE, retries=0)
+@task(trigger_rule=TriggerRule.ALL_DONE, retries=0, execution_timeout=timedelta(minutes=10))
 def log_done() -> None:
     # This final task will run regardless of previous task states.
     context = TaskContext.get_context()
