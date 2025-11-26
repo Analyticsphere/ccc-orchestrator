@@ -22,15 +22,15 @@ VOCAB_TIMEOUT_SEC = VOCAB_TIME_MIN * 60
 VOCAB_HARMONIZATION_RETRYS = 60
 
 # Vocabulary harmonization step constants
-SOURCE_TARGET = "Map source concepts to updated target codes"
-DOMAIN_CHECK = "Check for latest domain and update if needed"
-TARGET_REMAP = "Remap non-standard targets to new standard targets"
-TARGET_REPLACEMENT = "Replace non-standard targets with new standard targets"
-OMOP_ETL = "OMOP to OMOP ETL"
-CONSOLIDATE_ETL = "Consolidate ETL files"
-DEDUPLICATE_PRIMARY_KEYS = "Deduplicate primary keys in ETL files"
-DISCOVER_TABLES_FOR_DEDUP = "Discover tables for deduplication"
-DEDUPLICATE_SINGLE_TABLE = "Deduplicate single table"
+SOURCE_TARGET = "source_target"
+DOMAIN_CHECK = "domain_check"
+TARGET_REMAP = "target_remap"
+TARGET_REPLACEMENT = "target_replacement"
+OMOP_ETL = "omop_etl"
+CONSOLIDATE_ETL = "consolidate_etl"
+DEDUPLICATE_PRIMARY_KEYS = "deduplicate_primary_keys"
+DISCOVER_TABLES_FOR_DEDUP = "discover_tables_for_dedup"
+DEDUPLICATE_SINGLE_TABLE = "deduplicate_single_table"
 
 VOCABULARY_TABLES = [
     "concept",

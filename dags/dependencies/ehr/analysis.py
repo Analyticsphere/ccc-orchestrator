@@ -57,6 +57,7 @@ def run_dqd_job(
 def run_achilles_job(
     project_id: str,
     dataset_id: str,
+    atlas_results_dataset_id: str,
     gcs_artifact_path: str,
     cdm_version: str,
     cdm_source_name: str,
@@ -71,7 +72,8 @@ def run_achilles_job(
 
     Args:
         project_id: Google Cloud project ID
-        dataset_id: BigQuery dataset ID
+        dataset_id: BigQuery CDM dataset ID (where Achilles reads CDM data from)
+        atlas_results_dataset_id: BigQuery Atlas results dataset ID (where Achilles writes results to)
         gcs_artifact_path: GCS path for artifacts
         cdm_version: OMOP CDM version (e.g., "5.4")
         cdm_source_name: Human-friendly name for the CDM source
@@ -80,7 +82,7 @@ def run_achilles_job(
     Raises:
         Exception: If Cloud Run Job fails
     """
-    utils.logger.info(f"Executing Achilles Cloud Run Job for {project_id}.{dataset_id}")
+    utils.logger.info(f"Executing Achilles Cloud Run Job for CDM dataset {project_id}.{dataset_id}, writing results to {project_id}.{atlas_results_dataset_id}")
 
     # Create and execute Cloud Run Job operator
     operator = CloudRunExecuteJobOperator(
@@ -93,6 +95,7 @@ def run_achilles_job(
                 'env': [
                     {'name': 'PROJECT_ID', 'value': project_id},
                     {'name': 'CDM_DATASET_ID', 'value': dataset_id},
+                    {'name': 'ATLAS_RESULTS_DATASET_ID', 'value': atlas_results_dataset_id},
                     {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path},
                     {'name': 'CDM_VERSION', 'value': cdm_version},
                     {'name': 'CDM_SOURCE_NAME', 'value': cdm_source_name}
