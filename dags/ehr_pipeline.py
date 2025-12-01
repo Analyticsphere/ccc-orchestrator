@@ -12,6 +12,7 @@ import dependencies.ehr.processing_jobs as processing_jobs
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
 import dependencies.ehr.vocab as vocab
+from dependencies.ehr.storage_backend import storage
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
 from airflow.exceptions import AirflowSkipException  # type: ignore
@@ -355,7 +356,7 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 
     # Execute consolidation step via Cloud Run Job
     processing_jobs.run_harmonize_vocab_job(
-        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation",
+        file_path=storage.get_uri(f"{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation"),
         site=site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
@@ -376,7 +377,7 @@ def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[di
 
     # Discover all tables that need deduplication via Cloud Run Job
     table_configs = processing_jobs.run_discover_tables_job(
-        file_path=f"gs://{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery",
+        file_path=storage.get_uri(f"{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery"),
         site=site,
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
@@ -604,11 +605,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
 
     utils.logger.info(f"Triggering DQD checks for {site} data delivered on {delivery_date}")
 
-    gcs_artifact_path = os.path.join(
-        config.gcs_bucket,
-        delivery_date,
-        constants.ArtifactPaths.DQD.value
-    )
+    gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.DQD.value}"
 
     # Execute DQD via Cloud Run Job
     analysis.run_dqd_job(
@@ -628,11 +625,7 @@ def achilles(site_to_process: tuple[str, str]) -> None:
 
     utils.logger.info(f"Triggering Achilles analyses for {site} data delivered on {delivery_date}")
 
-    gcs_artifact_path = os.path.join(
-        config.gcs_bucket,
-        delivery_date,
-        constants.ArtifactPaths.ACHILLES.value
-    )
+    gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.ACHILLES.value}"
 
     # Execute Achilles via Cloud Run Job
     # Achilles reads CDM data from cdm_dataset_id and writes results to atlas_results_dataset_id

@@ -1,4 +1,5 @@
 from dependencies.ehr import constants, utils
+from dependencies.ehr.storage_backend import storage
 
 
 def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
@@ -47,7 +48,7 @@ def process_file(file_type: str, gcs_file_path: str) -> None:
     """
     Create optimized version of incoming EHR data file.
     """
-    utils.logger.info(f"Processing incoming {file_type} file gs://{gcs_file_path}")
+    utils.logger.info(f"Processing incoming {file_type} file {storage.get_uri(gcs_file_path)}")
     
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
@@ -62,7 +63,7 @@ def normalize_parquet_file(file_path: str, cdm_version: str, date_format: str, d
     """
     Standardize OMOP data file structure.
     """
-    utils.logger.info(f"Normalizing file gs://{file_path}")
+    utils.logger.info(f"Normalizing file {storage.get_uri(file_path)}")
     
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
