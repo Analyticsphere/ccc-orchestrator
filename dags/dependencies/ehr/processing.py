@@ -9,7 +9,7 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
     try:
         gcs_bucket = utils.get_site_bucket(site=site)
         full_path = f"{gcs_bucket}/{delivery_date}"
-        create_artifact_buckets(delivery_bucket=full_path)
+        create_artifact_directories(delivery_bucket=full_path)
 
         utils.logger.info(f"Getting files for {delivery_date} delivery from {site}")
 
@@ -32,15 +32,15 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
         utils.logger.error(f"Error getting file list: {e}")
         raise Exception(f"Error getting file list: {e}") from e
 
-def create_artifact_buckets(delivery_bucket: str) -> None:
+def create_artifact_directories(delivery_bucket: str) -> None:
     """
-    Create artifact buckets in the parent bucket for storing processing artifacts
+    Create artifact directories in the parent bucket for storing processing artifacts
     """
-    utils.logger.info(f"Creating artifact buckets in {delivery_bucket}")
-    
+    utils.logger.info(f"Creating artifact directories in {delivery_bucket}")
+
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
-        endpoint="create_artifact_buckets",
+        endpoint="create_artifact_directories",
         json_data={"delivery_bucket": delivery_bucket}
     )
 

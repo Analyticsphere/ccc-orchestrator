@@ -3,7 +3,7 @@ from dependencies.ehr import constants, utils
 
 def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_path: str) -> None:
     utils.logger.info(f"Validating schema of {file_path} against OMOP v{omop_version}")
-    
+
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="validate_file",
@@ -11,7 +11,7 @@ def validate_file(file_path: str, omop_version: str, delivery_date: str, gcs_pat
             "file_path": file_path,
             "omop_version": omop_version,
             "delivery_date": delivery_date,
-            "gcs_path": gcs_path
+            "storage_path": gcs_path
         }
     )
 
