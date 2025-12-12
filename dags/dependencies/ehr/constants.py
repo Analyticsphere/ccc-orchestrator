@@ -71,7 +71,7 @@ class FileConfig(str, Enum):
     FILE_DELIVERY_FORMAT = "file_delivery_format"
     PROJECT_ID = "project_id"
     CDM_BQ_DATASET = "cdm_bq_dataset"
-    ATLAS_RESULTS_BQ_DATASET = "atlas_results_bq_dataset"
+    ANALYTICS_BQ_DATASET = "analytics_bq_dataset"
     OMOP_VERSION = "omop_version"
     SITE = "site"
     DELIVERY_DATE = "delivery_date"

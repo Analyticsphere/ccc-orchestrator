@@ -16,8 +16,8 @@ Jobs executed by this module:
 
 import json
 
-from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
-
+from airflow.providers.google.cloud.operators.cloud_run import \
+    CloudRunExecuteJobOperator
 from dependencies.ehr import constants, utils
 from dependencies.ehr.storage_backend import storage
 

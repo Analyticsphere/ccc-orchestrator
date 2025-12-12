@@ -23,7 +23,7 @@ def load_harmonized_tables_to_bq(gcs_bucket: str, delivery_date: str, project_id
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="harmonized_parquets_to_bq",
         json_data={
-            "gcs_bucket": gcs_bucket,
+            "bucket": gcs_bucket,
             "delivery_date": delivery_date,
             "project_id": project_id,
             "dataset_id": dataset_id

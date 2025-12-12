@@ -1,4 +1,3 @@
-import os
 from datetime import timedelta
 
 import airflow  # type: ignore
@@ -12,16 +11,16 @@ import dependencies.ehr.processing_jobs as processing_jobs
 import dependencies.ehr.utils as utils
 import dependencies.ehr.validation as validation
 import dependencies.ehr.vocab as vocab
-from dependencies.ehr.storage_backend import storage
 from airflow import DAG  # type: ignore
 from airflow.decorators import task  # type: ignore
-from airflow.exceptions import AirflowSkipException  # type: ignore
 from airflow.exceptions import AirflowException  # type: ignore
+from airflow.exceptions import AirflowSkipException  # type: ignore
 from airflow.utils.dates import days_ago  # type: ignore
 from airflow.utils.task_group import TaskGroup  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule  # type: ignore
 from dependencies.ehr.dag_helpers import (SiteConfig, TaskContext,
                                           log_task_execution)
+from dependencies.ehr.storage_backend import storage
 
 default_args = {
     'start_date': airflow.utils.dates.days_ago(1),
@@ -89,7 +88,7 @@ def end_if_all_processed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     return True
 
 
-@task(execution_timeout=timedelta(minutes=15))
+@task(execution_timeout=timedelta(minutes=15), trigger_rule="none_failed")
 def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed.
@@ -138,7 +137,7 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
     return file_configs
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def convert_file(file_config_dict: dict) -> None:
     """
@@ -155,7 +154,7 @@ def convert_file(file_config_dict: dict) -> None:
     )
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def validate_file(file_config_dict: dict) -> None:
     """
@@ -170,7 +169,7 @@ def validate_file(file_config_dict: dict) -> None:
     )
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed",execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def normalize_file(file_config_dict: dict) -> None:
     """
@@ -189,7 +188,7 @@ def normalize_file(file_config_dict: dict) -> None:
     )
 
 
-@task(max_active_tis_per_dag=24, execution_timeout=timedelta(hours=1))
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def cdm_upgrade(file_config_dict: dict) -> None:
     """
@@ -211,6 +210,21 @@ def cdm_upgrade(file_config_dict: dict) -> None:
             project_id=config.project_id,
             context=TaskContext.get_context()
         )
+
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
+@log_task_execution()
+def populate_cdm_source_file(site_to_process: tuple[str, str]) -> None:
+    """
+    Populate cdm_source Parquet file with metadata if empty or non-existent.
+
+    Ensures cdm_source.parquet exists with proper metadata before BigQuery loading.
+    The Parquet file will be loaded to BigQuery through the normal data pipeline.
+    """
+    site, delivery_date = site_to_process
+
+    cdm_source_data = omop.generate_cdm_source_json(site=site, delivery_date=delivery_date)
+    omop.populate_cdm_source_file(cdm_source_data=cdm_source_data)
 
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
@@ -418,7 +432,7 @@ def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
     )
 
 
-@task(execution_timeout=timedelta(minutes=5))
+@task(execution_timeout=timedelta(minutes=5), trigger_rule="none_failed")
 def create_derived_table_configs(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Create a configuration dictionary for each site-table combination.
@@ -533,6 +547,9 @@ def load_remaining(file_config_dict: dict) -> None:
     elif fc.table_name in constants.VOCAB_HARMONIZED_TABLES:
         utils.logger.info(f"Skip loading {fc.table_name} to BigQuery")
         raise AirflowSkipException
+    elif fc.table_name == "cdm_source":
+        utils.logger.info(f"Skip loading {fc.table_name} to BigQuery; handled in subsequent cleanup task")
+        raise AirflowSkipException
     else:
         bq.load_individual_parquet_to_bq(
             file_path=fc.file_path,
@@ -587,9 +604,15 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
                 omop_version=constants.OMOP_TARGET_CDM_VERSION
             )
 
-            # Add record to cdm_source table in BigQuery, if not provided by site
-            cdm_source_data = omop.generate_cdm_source_json(site=site, delivery_date=delivery_date)
-            omop.populate_cdm_source(cdm_source_data=cdm_source_data)
+            # Load cdm_source file to BigQuery (guaranteed to exist after populate_cdm_source_file task)
+            cdm_source_file_path = f"{config.gcs_bucket}/{delivery_date}/artifacts/converted_files/cdm_source.parquet"
+            bq.load_individual_parquet_to_bq(
+                file_path=cdm_source_file_path,
+                project_id=config.project_id,
+                dataset_id=config.cdm_dataset_id,
+                table_name="cdm_source",
+                write_type=constants.BQWriteTypes.PROCESSED_FILE
+            )
 
             utils.logger.info(f"Final CDM cleanup completed for {site} delivery {delivery_date}")
         except Exception as e:
@@ -611,6 +634,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
     analysis.run_dqd_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
+        analytics_dataset_id=config.analytics_dataset_id,
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
@@ -628,11 +652,11 @@ def achilles(site_to_process: tuple[str, str]) -> None:
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.ACHILLES.value}"
 
     # Execute Achilles via Cloud Run Job
-    # Achilles reads CDM data from cdm_dataset_id and writes results to atlas_results_dataset_id
+    # Achilles reads CDM data from cdm_dataset_id and writes results to analytics_dataset_id
     analysis.run_achilles_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
-        atlas_results_dataset_id=config.atlas_results_dataset_id,
+        analytics_dataset_id=config.analytics_dataset_id,
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
@@ -651,7 +675,7 @@ def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
     analysis.create_atlas_results_tables(
         project_id=config.project_id,
         cdm_dataset_id=config.cdm_dataset_id,
-        atlas_results_dataset_id=config.atlas_results_dataset_id
+        analytics_dataset_id=config.analytics_dataset_id
     )
 
 @task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
@@ -799,12 +823,15 @@ with dag:
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
 
+    # Expand the new populate_cdm_source_file task
+    populate_cdm_source_files = populate_cdm_source_file.expand(site_to_process=unprocessed_sites)
+
     # Set task dependencies
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
 
-    # Vocab harmonization task group executes after file upgrade
-    upgrade_file >> vocab_harmonization_group
+    # Populate cdm_source file after upgrade, before vocab harmonization
+    upgrade_file >> populate_cdm_source_files >> vocab_harmonization_group
 
     # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
     vocab_harmonization_group >> generate_derived_tables_group

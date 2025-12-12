@@ -32,9 +32,9 @@ class SiteConfig:
         return self._config[constants.FileConfig.CDM_BQ_DATASET.value]
 
     @property
-    def atlas_results_dataset_id(self) -> str:
+    def analytics_dataset_id(self) -> str:
         """BigQuery Atlas Results dataset ID for this site."""
-        return self._config[constants.FileConfig.ATLAS_RESULTS_BQ_DATASET.value]
+        return self._config[constants.FileConfig.ANALYTICS_BQ_DATASET.value]
 
     @property
     def gcs_bucket(self) -> str:

@@ -90,19 +90,25 @@ def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="load_derived_tables_to_bq",
         json_data={
-            "gcs_bucket": gcs_bucket,
+            "bucket": gcs_bucket,
             "delivery_date": delivery_date,
             "project_id": project_id,
             "dataset_id": dataset_id
         }
     )
 
-def populate_cdm_source(cdm_source_data: dict) -> None:
-    utils.logger.info(f"If empty, populating cdm_source table for {cdm_source_data['source_release_date']} delivery from {cdm_source_data['cdm_source_abbreviation']}")
-    
+def populate_cdm_source_file(cdm_source_data: dict) -> None:
+    """
+    Checks if site delivered cdm_source file and populates it with metadata if needed.
+    """
+    utils.logger.info(
+        f"Checking cdm_source file for {cdm_source_data['source_release_date']} "
+        f"delivery from {cdm_source_data['cdm_source_abbreviation']}"
+    )
+
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
-        endpoint="populate_cdm_source",
+        endpoint="populate_cdm_source_file",
         json_data=cdm_source_data
     )
 
