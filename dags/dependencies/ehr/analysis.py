@@ -1,10 +1,12 @@
-from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator  # type: ignore
+from airflow.providers.google.cloud.operators.cloud_run import \
+    CloudRunExecuteJobOperator  # type: ignore
 from dependencies.ehr import constants, utils
 
 
 def run_dqd_job(
     project_id: str,
     dataset_id: str,
+    analytics_dataset_id: str,
     gcs_artifact_path: str,
     cdm_version: str,
     cdm_source_name: str,
@@ -40,6 +42,7 @@ def run_dqd_job(
                 'env': [
                     {'name': 'PROJECT_ID', 'value': project_id},
                     {'name': 'CDM_DATASET_ID', 'value': dataset_id},
+                    {'name': 'ANALYTICS_DATASET_ID', 'value': analytics_dataset_id},
                     {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path},
                     {'name': 'CDM_VERSION', 'value': cdm_version},
                     {'name': 'CDM_SOURCE_NAME', 'value': cdm_source_name}
@@ -57,7 +60,7 @@ def run_dqd_job(
 def run_achilles_job(
     project_id: str,
     dataset_id: str,
-    atlas_results_dataset_id: str,
+    analytics_dataset_id: str,
     gcs_artifact_path: str,
     cdm_version: str,
     cdm_source_name: str,
@@ -73,7 +76,7 @@ def run_achilles_job(
     Args:
         project_id: Google Cloud project ID
         dataset_id: BigQuery CDM dataset ID (where Achilles reads CDM data from)
-        atlas_results_dataset_id: BigQuery Atlas results dataset ID (where Achilles writes results to)
+        analytics_dataset_id: BigQuery analytics dataset ID (where Achilles writes results to)
         gcs_artifact_path: GCS path for artifacts
         cdm_version: OMOP CDM version (e.g., "5.4")
         cdm_source_name: Human-friendly name for the CDM source
@@ -82,7 +85,7 @@ def run_achilles_job(
     Raises:
         Exception: If Cloud Run Job fails
     """
-    utils.logger.info(f"Executing Achilles Cloud Run Job for CDM dataset {project_id}.{dataset_id}, writing results to {project_id}.{atlas_results_dataset_id}")
+    utils.logger.info(f"Executing Achilles Cloud Run Job for CDM dataset {project_id}.{dataset_id}, writing results to {project_id}.{analytics_dataset_id}")
 
     # Create and execute Cloud Run Job operator
     operator = CloudRunExecuteJobOperator(
@@ -95,7 +98,7 @@ def run_achilles_job(
                 'env': [
                     {'name': 'PROJECT_ID', 'value': project_id},
                     {'name': 'CDM_DATASET_ID', 'value': dataset_id},
-                    {'name': 'ATLAS_RESULTS_DATASET_ID', 'value': atlas_results_dataset_id},
+                    {'name': 'ANALYTICS_DATASET_ID', 'value': analytics_dataset_id},
                     {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path},
                     {'name': 'CDM_VERSION', 'value': cdm_version},
                     {'name': 'CDM_SOURCE_NAME', 'value': cdm_source_name}
@@ -113,7 +116,7 @@ def run_achilles_job(
 def create_atlas_results_tables(
     project_id: str,
     cdm_dataset_id: str,
-    atlas_results_dataset_id: str
+    analytics_dataset_id: str
 ) -> None:
     """
     Create Atlas results tables in BigQuery by calling the OMOP analyzer API.
@@ -124,12 +127,12 @@ def create_atlas_results_tables(
     Args:
         project_id: Google Cloud project ID
         cdm_dataset_id: BigQuery CDM dataset ID
-        atlas_results_dataset_id: BigQuery dataset ID where Atlas results tables will be created
+        analytics_dataset_id: BigQuery dataset ID where Atlas results tables will be created
 
     Raises:
         Exception: If API call fails
     """
-    utils.logger.info(f"Creating Atlas results tables in {project_id}.{atlas_results_dataset_id}")
+    utils.logger.info(f"Creating Atlas results tables in {project_id}.{analytics_dataset_id}")
 
     # Call the API endpoint
     response = utils.make_api_call(
@@ -139,13 +142,13 @@ def create_atlas_results_tables(
         json_data={
             "project_id": project_id,
             "cdm_dataset_id": cdm_dataset_id,
-            "atlas_results_dataset_id": atlas_results_dataset_id
+            "analytics_dataset_id": analytics_dataset_id
         },
         timeout=300  # 5 minute timeout
     )
 
     if response and response.get('status') == 'success':
-        utils.logger.info(f"Atlas results tables created successfully in {project_id}.{atlas_results_dataset_id}")
+        utils.logger.info(f"Atlas results tables created successfully in {project_id}.{analytics_dataset_id}")
     else:
         error_msg = f"Failed to create Atlas results tables: {response}"
         utils.logger.error(error_msg)

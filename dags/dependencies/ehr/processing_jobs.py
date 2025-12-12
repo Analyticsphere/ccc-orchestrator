@@ -16,9 +16,10 @@ Jobs executed by this module:
 
 import json
 
-from airflow.providers.google.cloud.operators.cloud_run import CloudRunExecuteJobOperator
-
+from airflow.providers.google.cloud.operators.cloud_run import \
+    CloudRunExecuteJobOperator
 from dependencies.ehr import constants, utils
+from dependencies.ehr.storage_backend import storage
 
 
 def run_process_file_job(
@@ -226,7 +227,7 @@ def run_discover_tables_job(
     output_gcs_path = f"{gcs_bucket}/{delivery_date}/artifacts/temp/table_configs_{site}.json"
 
     utils.logger.info(f"Discovering tables for deduplication for site {site}")
-    utils.logger.info(f"Results will be written to: gs://{output_gcs_path}")
+    utils.logger.info(f"Results will be written to: {storage.get_uri(output_gcs_path)}")
 
     # Execute the job
     run_harmonize_vocab_job(
@@ -241,20 +242,17 @@ def run_discover_tables_job(
 
     # Read results from GCS
     try:
-        from google.cloud import storage
+        from google.cloud import storage as gcs_storage
 
         # Parse GCS path
-        if output_gcs_path.startswith('gs://'):
-            gcs_path = output_gcs_path.replace('gs://', '')
-        else:
-            gcs_path = output_gcs_path
+        gcs_path = storage.strip_scheme(output_gcs_path)
 
         parts = gcs_path.split('/', 1)
         bucket_name = parts[0]
         blob_path = parts[1] if len(parts) > 1 else ''
 
         # Download and parse JSON
-        storage_client = storage.Client(project=project_id)
+        storage_client = gcs_storage.Client(project=project_id)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
 

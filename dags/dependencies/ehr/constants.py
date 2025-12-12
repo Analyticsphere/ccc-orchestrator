@@ -71,7 +71,7 @@ class FileConfig(str, Enum):
     FILE_DELIVERY_FORMAT = "file_delivery_format"
     PROJECT_ID = "project_id"
     CDM_BQ_DATASET = "cdm_bq_dataset"
-    ATLAS_RESULTS_BQ_DATASET = "atlas_results_bq_dataset"
+    ANALYTICS_BQ_DATASET = "analytics_bq_dataset"
     OMOP_VERSION = "omop_version"
     SITE = "site"
     DELIVERY_DATE = "delivery_date"
@@ -84,11 +84,10 @@ class FileConfig(str, Enum):
 
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"
-    FIXED_FILES = f"{ARTIFACTS}fixed_files/"
     CONVERTED_FILES = f"{ARTIFACTS}converted_files/"
     HARMONIZED_FILES = f"{ARTIFACTS}harmonized_files/"
     OMOP_ETL = f"{ARTIFACTS}omop_etl/"
-    CREATED_FILES = f"{ARTIFACTS}created_files/"
+    DERIVED_FILES = f"{ARTIFACTS}derived_files/"
     REPORT = f"{ARTIFACTS}delivery_report/"
     REPORT_TMP = f"{ARTIFACTS}delivery_report/tmp/"
     DQD = f"{ARTIFACTS}dqd/"
@@ -96,6 +95,7 @@ class ArtifactPaths(str, Enum):
     INVALID_ROWS = f"{ARTIFACTS}invalid_rows/"
 
 class BQWriteTypes(str, Enum):
+    # SPECIFIC_FILE -> overwrite table with the exact Parquet file in file_path
     SPECIFIC_FILE = "specific_file"
-    ETLed_FILE = "ETLed_file"
+    # PROCESSED_FILE -> overwrite table with the pipeline-processed version of the file in file_path
     PROCESSED_FILE = "processed_file"
