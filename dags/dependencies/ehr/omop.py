@@ -10,7 +10,7 @@ def generate_report_json(site: str, delivery_date: str) -> dict:
 
     report_data = {
         "site": site,
-        "site_bucket": config.gcs_bucket,
+        "bucket": config.gcs_bucket,
         "delivery_date": delivery_date,
         "site_display_name": config.display_name,
         "file_delivery_format": config.file_delivery_format,
@@ -35,7 +35,7 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
         "source_release_date": delivery_date,
         "cdm_release_date": datetime.today().strftime('%Y-%m-%d'),
         "cdm_version": config.omop_version,
-        "gcs_bucket": config.gcs_bucket,
+        "bucket": config.gcs_bucket,
         "project_id": config.project_id,
         "dataset_id": config.cdm_dataset_id
     }
@@ -55,7 +55,7 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
         }
     )
 
-def generate_derived_table_from_harmonized(site: str, site_bucket: str, delivery_date: str, table_name: str, vocab_version: str) -> None:
+def generate_derived_table_from_harmonized(site: str, bucket: str, delivery_date: str, table_name: str, vocab_version: str) -> None:
     """
     Generate a derived data table from HARMONIZED data (post-vocabulary harmonization).
 
@@ -70,7 +70,7 @@ def generate_derived_table_from_harmonized(site: str, site_bucket: str, delivery
         endpoint="generate_derived_tables_from_harmonized",
         json_data={
             "site": site,
-            "site_bucket": site_bucket,
+            "bucket": bucket,
             "delivery_date": delivery_date,
             "table_name": table_name,
             "vocab_version": vocab_version
