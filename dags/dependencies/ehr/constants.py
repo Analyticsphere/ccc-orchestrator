@@ -28,7 +28,6 @@ TARGET_REMAP = "target_remap"
 TARGET_REPLACEMENT = "target_replacement"
 OMOP_ETL = "omop_etl"
 CONSOLIDATE_ETL = "consolidate_etl"
-DEDUPLICATE_PRIMARY_KEYS = "deduplicate_primary_keys"
 DISCOVER_TABLES_FOR_DEDUP = "discover_tables_for_dedup"
 DEDUPLICATE_SINGLE_TABLE = "deduplicate_single_table"
 
