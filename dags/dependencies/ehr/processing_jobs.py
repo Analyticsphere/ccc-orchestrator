@@ -12,6 +12,7 @@ Jobs executed by this module:
     - upgrade_cdm: Upgrade CDM versions (e.g., 5.3 to 5.4)
     - harmonize_vocab: 8-step vocabulary harmonization process
     - generate_derived_tables: Generate observation_period, condition_era, drug_era
+    - generate_report_csv: Generate delivery report CSV with metadata and statistics
 """
 
 import json
@@ -355,6 +356,64 @@ def run_generate_derived_table_job(
                     {'name': 'DELIVERY_DATE', 'value': delivery_date},
                     {'name': 'TABLE_NAME', 'value': table_name},
                     {'name': 'VOCAB_VERSION', 'value': vocab_version}
+                ]
+            }]
+        },
+        deferrable=False
+    )
+
+    operator.execute(context=context)
+
+
+def run_generate_report_csv_job(
+    site: str,
+    gcs_bucket: str,
+    delivery_date: str,
+    site_display_name: str,
+    file_delivery_format: str,
+    delivered_cdm_version: str,
+    target_vocabulary_version: str,
+    target_cdm_version: str,
+    project_id: str,
+    context
+) -> None:
+    """
+    Execute delivery report CSV generation as a Cloud Run Job.
+
+    Generates a CSV file with processing metadata, row counts, vocabulary breakdowns,
+    and type concept distributions. The CSV serves as a data source for visual
+    reporting and dashboards.
+
+    Args:
+        site: Site identifier
+        gcs_bucket: GCS bucket path for the site
+        delivery_date: Delivery date (YYYY-MM-DD format)
+        site_display_name: Human-readable site name
+        file_delivery_format: Format of delivered files (e.g., .csv, .parquet)
+        delivered_cdm_version: OMOP CDM version delivered by site
+        target_vocabulary_version: Target vocabulary version
+        target_cdm_version: Target OMOP CDM version
+        project_id: GCP project ID
+        context: Airflow task context
+    """
+    utils.logger.info(f"Executing generate_report_csv job for {site} - {delivery_date}")
+
+    operator = CloudRunExecuteJobOperator(
+        task_id=f'generate_report_csv_job',
+        project_id=project_id,
+        region='us-central1',
+        job_name='ccc-omop-file-processor-generate-report-csv-job',
+        overrides={
+            'container_overrides': [{
+                'env': [
+                    {'name': 'SITE', 'value': site},
+                    {'name': 'GCS_BUCKET', 'value': gcs_bucket},
+                    {'name': 'DELIVERY_DATE', 'value': delivery_date},
+                    {'name': 'SITE_DISPLAY_NAME', 'value': site_display_name},
+                    {'name': 'FILE_DELIVERY_FORMAT', 'value': file_delivery_format},
+                    {'name': 'DELIVERED_CDM_VERSION', 'value': delivered_cdm_version},
+                    {'name': 'TARGET_VOCABULARY_VERSION', 'value': target_vocabulary_version},
+                    {'name': 'TARGET_CDM_VERSION', 'value': target_cdm_version}
                 ]
             }]
         },

@@ -593,10 +593,6 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         try:
             bq.bq_log_running(site=site, delivery_date=delivery_date, run_id=run_id)
 
-            # Generate final data delivery report
-            report_data = omop.generate_report_json(site=site, delivery_date=delivery_date)
-            validation.generate_delivery_report(report_data=report_data)
-
             # Create empty tables for OMOP files not provided in delivery
             omop.create_missing_omop_tables(
                 project_id=config.project_id,
@@ -618,6 +614,35 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
         except Exception as e:
             bq.bq_log_error(site=site, delivery_date=delivery_date, run_id=run_id, message=str(e))
             raise Exception(f"Unable to perform CDM cleanup: {e}") from e
+
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@log_task_execution()
+def generate_report_csv(site_to_process: tuple[str, str]) -> None:
+    """
+    Generate delivery report CSV file with processing metadata and statistics.
+
+    This CSV file serves as the data source for visual reporting and dashboards.
+    The report includes metadata, row counts, vocabulary breakdowns, and type concept distributions.
+    """
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+
+    utils.logger.info(f"Generating delivery report CSV for {site} data delivered on {delivery_date}")
+
+    # Execute report generation via Cloud Run Job
+    processing_jobs.run_generate_report_csv_job(
+        site=site,
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        site_display_name=config.display_name,
+        file_delivery_format=config.file_delivery_format,
+        delivered_cdm_version=config.omop_version,
+        target_vocabulary_version=constants.OMOP_TARGET_VOCAB_VERSION,
+        target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
+        project_id=config.project_id,
+        context=TaskContext.get_context()
+    )
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
@@ -808,6 +833,9 @@ with dag:
 
     clean = cleanup(sites_to_process=unprocessed_sites)
 
+    # Generate delivery report CSV file
+    run_report = generate_report_csv.expand(site_to_process=unprocessed_sites)
+
     # Run Data Quality Dashboard after loading data
     run_dqd = dqd.expand(site_to_process=unprocessed_sites)
 
@@ -842,5 +870,5 @@ with dag:
     # Continue with remaining tasks after loading dataset
     load_to_bigquery_group >> clean
 
-    # Run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
-    clean >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done
+    # Generate report CSV, then run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
+    clean >> run_report >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done
