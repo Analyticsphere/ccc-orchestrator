@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -36,21 +37,11 @@ def format_log_context(
     Args:
         site: Site name (e.g., 'synthea_54')
         delivery_date: Delivery date in YYYY-MM-DD format
-        file: Filename, table name, or file path
+        file: Filename, table name, or file path (extensions will be stripped)
 
     Returns:
         Formatted context string like "[site|delivery_date|file]" or subset.
         Returns empty string if no context provided.
-
-    Examples:
-        >>> format_log_context(site="synthea_54", delivery_date="2024-01-15", file="person.csv")
-        "[synthea_54|2024-01-15|person.csv] "
-        >>> format_log_context(site="synthea_54", delivery_date="2024-01-15")
-        "[synthea_54|2024-01-15] "
-        >>> format_log_context(site="synthea_54")
-        "[synthea_54] "
-        >>> format_log_context()
-        ""
     """
     parts = []
     if site:
@@ -58,7 +49,14 @@ def format_log_context(
     if delivery_date:
         parts.append(delivery_date)
     if file:
-        parts.append(file)
+        # Strip file extension for cleaner logging
+        # Extract just the basename if it's a full path
+        file_base = os.path.basename(file)
+        # Remove extension (handles .csv, .parquet, etc.)
+        file_without_ext, _ = os.path.splitext(file_base)
+        # Only add if we have a meaningful name (not just an extension like ".csv")
+        if file_without_ext:
+            parts.append(file_without_ext)
 
     return f"[{'|'.join(parts)}] " if parts else ""
 

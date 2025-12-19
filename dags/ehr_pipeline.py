@@ -514,18 +514,31 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
 @log_task_execution()
 def load_harmonized_tables(site_to_process: tuple[str, str]) -> None:
     """
-    Load all harmonized vocabulary tables to BigQuery
+    Load all harmonized vocabulary tables to BigQuery.
+
+    Skips if no harmonized tables are available (i.e., no clinical tables in delivery).
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
+    log_ctx = utils.format_log_context(site=site, delivery_date=delivery_date)
 
-    bq.load_harmonized_tables_to_bq(
-        gcs_bucket=config.gcs_bucket,
-        delivery_date=delivery_date,
-        project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id,
-        site=site
-    )
+    try:
+        bq.load_harmonized_tables_to_bq(
+            gcs_bucket=config.gcs_bucket,
+            delivery_date=delivery_date,
+            project_id=config.project_id,
+            dataset_id=config.cdm_dataset_id,
+            site=site
+        )
+    except Exception as e:
+        # Check if error is due to no harmonized files existing
+        error_msg = str(e)
+        if "No table directories found" in error_msg or "No harmonized tables found" in error_msg:
+            utils.logger.info(f"{log_ctx}No harmonized tables found; skipping load (no clinical tables in delivery)")
+            raise AirflowSkipException(f"No harmonized tables to load for {site}")
+        else:
+            # Re-raise other errors
+            raise
     
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
