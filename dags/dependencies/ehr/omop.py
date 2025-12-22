@@ -1,11 +1,11 @@
 from datetime import datetime
 
 from dependencies.ehr import constants, utils
-from dependencies.ehr.dag_helpers import SiteConfig
+from dependencies.ehr.dag_helpers import SiteConfig, format_log_context
 
 
 def generate_report_json(site: str, delivery_date: str) -> dict:
-    # Generate final data delivery report
+    """Generate report JSON data for the delivery report."""
     config = SiteConfig(site=site)
 
     report_data = {
@@ -22,9 +22,9 @@ def generate_report_json(site: str, delivery_date: str) -> dict:
     return report_data
 
 def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
+    """Generate JSON data needed to populate a blank cdm_source table."""
     config = SiteConfig(site=site)
 
-    # Create JSON with data needed to populate a blank cdm_source table
     cdm_source = {
         "cdm_source_name": config.display_name,
         "cdm_source_abbreviation": site,
@@ -42,9 +42,12 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
 
     return cdm_source
 
-def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: str) -> None:
-    utils.logger.info(f"Creating any missing OMOP tables in {project_id}.{dataset_id}")
+def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: str, site: str = None, delivery_date: str = None) -> None:
+    """Create any missing OMOP CDM tables in BigQuery dataset."""
     
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+    utils.logger.info(f"{log_ctx}Creating missing OMOP CDM {omop_version} tables in: {project_id}.{dataset_id}")
+
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="create_missing_tables",
@@ -52,18 +55,16 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
             "omop_version": omop_version,
             "project_id": project_id,
             "dataset_id": dataset_id
-        }
+        },
+        site=site,
+        delivery_date=delivery_date
     )
 
 def generate_derived_table_from_harmonized(site: str, bucket: str, delivery_date: str, table_name: str, vocab_version: str) -> None:
-    """
-    Generate a derived data table from HARMONIZED data (post-vocabulary harmonization).
-
-    This function calls the file processor endpoint that generates derived tables using DuckDB
-    from harmonized Parquet files. The derived table is written to artifacts/derived_files/
-    and will be loaded to BigQuery in a separate step.
-    """
-    utils.logger.info(f"Generating derived data table {table_name} from harmonized data for {delivery_date} delivery from {site}")
+    """Generate a derived data table from HARMONIZED data (post-vocabulary harmonization)."""
+    
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date, file=table_name)
+    utils.logger.info(f"{log_ctx}Generating derived table from harmonized data")
 
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
@@ -74,17 +75,17 @@ def generate_derived_table_from_harmonized(site: str, bucket: str, delivery_date
             "delivery_date": delivery_date,
             "table_name": table_name,
             "vocab_version": vocab_version
-        }
+        },
+        site=site,
+        delivery_date=delivery_date,
+        file=table_name
     )
 
-def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project_id: str, dataset_id: str) -> None:
-    """
-    Load all derived table Parquet files from artifacts/derived_files/ to BigQuery.
-
-    This function discovers all derived table files in the derived_files directory and
-    loads them to their corresponding BigQuery tables.
-    """
-    utils.logger.info(f"Loading derived tables from artifacts/derived_files/ to BigQuery for {delivery_date} delivery")
+def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project_id: str, dataset_id: str, site: str = None) -> None:
+    """Load all derived table Parquet files from artifacts/derived_files/ to BigQuery."""
+    
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+    utils.logger.info(f"{log_ctx}Loading derived tables to BigQuery: {project_id}.{dataset_id}")
 
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
@@ -94,29 +95,40 @@ def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project
             "delivery_date": delivery_date,
             "project_id": project_id,
             "dataset_id": dataset_id
-        }
+        },
+        site=site,
+        delivery_date=delivery_date
     )
 
 def populate_cdm_source_file(cdm_source_data: dict) -> None:
     """
     Checks if site delivered cdm_source file and populates it with metadata if needed.
+
+    Args:
+        cdm_source_data: Dictionary containing CDM source metadata
     """
-    utils.logger.info(
-        f"Checking cdm_source file for {cdm_source_data['source_release_date']} "
-        f"delivery from {cdm_source_data['cdm_source_abbreviation']}"
-    )
+    
+
+    site = cdm_source_data.get('cdm_source_abbreviation')
+    delivery_date = cdm_source_data.get('source_release_date')
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date, file='cdm_source')
+
+    utils.logger.info(f"{log_ctx}Populating cdm_source metadata file")
 
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="populate_cdm_source_file",
-        json_data=cdm_source_data
+        json_data=cdm_source_data,
+        site=site,
+        delivery_date=delivery_date,
+        file='cdm_source'
     )
 
-def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> None:
-    """
-    Upgrade CDM version of the file (e.g., from 5.3 to 5.4)
-    """
-    utils.logger.info(f"Upgrading CDM version {cdm_version} of file gs://{file_path} to {target_cdm_version}")
+def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str, site: str = None, delivery_date: str = None, file: str = None) -> None:
+    """Upgrade CDM version of the file (e.g., from 5.3 to 5.4)"""
+    
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date, file=file)
+    utils.logger.info(f"{log_ctx}Upgrading CDM version: {cdm_version} → {target_cdm_version}")
 
     utils.make_api_call(
         url=constants.OMOP_PROCESSOR_ENDPOINT,
@@ -125,5 +137,8 @@ def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str) -> No
             "file_path": file_path,
             "omop_version": cdm_version,
             "target_omop_version": target_cdm_version
-        }
+        },
+        site=site,
+        delivery_date=delivery_date,
+        file=file
     )

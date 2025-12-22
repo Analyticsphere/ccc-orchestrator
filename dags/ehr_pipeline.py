@@ -19,6 +19,7 @@ from airflow.utils.dates import days_ago  # type: ignore
 from airflow.utils.task_group import TaskGroup  # type: ignore
 from airflow.utils.trigger_rule import TriggerRule  # type: ignore
 from dependencies.ehr.dag_helpers import (SiteConfig, TaskContext,
+                                          format_log_context,
                                           log_task_execution)
 from dependencies.ehr.storage_backend import storage
 
@@ -88,7 +89,7 @@ def end_if_all_processed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     return True
 
 
-@task(execution_timeout=timedelta(minutes=15), trigger_rule="none_failed")
+@task(execution_timeout=timedelta(minutes=30), trigger_rule="none_failed")
 def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed.
@@ -150,7 +151,9 @@ def convert_file(file_config_dict: dict) -> None:
         file_type=fc.file_delivery_format,
         gcs_file_path=fc.file_path,
         project_id=config.project_id,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        site=fc.site,
+        delivery_date=fc.delivery_date
     )
 
 
@@ -184,7 +187,10 @@ def normalize_file(file_config_dict: dict) -> None:
         date_format=fc.date_format,
         datetime_format=fc.datetime_format,
         project_id=config.project_id,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        site=fc.site,
+        delivery_date=fc.delivery_date,
+        file=fc.table_name
     )
 
 
@@ -196,11 +202,12 @@ def cdm_upgrade(file_config_dict: dict) -> None:
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
     config = SiteConfig(site=fc.site)
+    log_ctx = format_log_context(site=fc.site, delivery_date=fc.delivery_date, file=fc.table_name)
 
     if fc.omop_version == constants.OMOP_TARGET_CDM_VERSION:
         utils.logger.info(
-            f"CDM version of {fc.file_path} ({fc.omop_version}) matches "
-            f"upgrade target {constants.OMOP_TARGET_CDM_VERSION}; upgrade not needed"
+            f"{log_ctx}CDM version ({fc.omop_version}) matches upgrade target "
+            f"{constants.OMOP_TARGET_CDM_VERSION}; skipping upgrade"
         )
     else:
         processing_jobs.run_upgrade_cdm_job(
@@ -208,7 +215,10 @@ def cdm_upgrade(file_config_dict: dict) -> None:
             cdm_version=fc.omop_version,
             target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
             project_id=config.project_id,
-            context=TaskContext.get_context()
+            context=TaskContext.get_context(),
+            site=fc.site,
+            delivery_date=fc.delivery_date,
+            file=fc.table_name
         )
 
 
@@ -237,7 +247,8 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
 
     # Check if this table should be harmonized
     if not vocab.should_harmonize_table(table_name=fc.table_name):
-        utils.logger.info(f"File {fc.table_name} is not a clinical data table and does not need vocabulary harmonization")
+        log_ctx = format_log_context(site=fc.site, delivery_date=fc.delivery_date, file=fc.table_name)
+        utils.logger.info(f"{log_ctx}Table is not a clinical data table; skipping vocabulary harmonization")
         raise AirflowSkipException
 
     # Get configuration parameters
@@ -250,7 +261,8 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.SOURCE_TARGET,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
     )
 
 
@@ -276,7 +288,8 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.TARGET_REMAP,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
     )
 
 
@@ -302,7 +315,8 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.TARGET_REPLACEMENT,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
     )
 
 
@@ -328,7 +342,8 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.DOMAIN_CHECK,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
     )
 
 
@@ -354,7 +369,8 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.OMOP_ETL,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
     )
 
 
@@ -375,7 +391,8 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
         step=constants.CONSOLIDATE_ETL,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        delivery_date=delivery_date
     )
 
 
@@ -486,28 +503,42 @@ def prepare_bq(site_to_process: tuple[str, str]) -> None:
     """
     Deletes files and tables from previous pipeline runs.
     """
-    site, _ = site_to_process
+    site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
     # Delete all tables within the BigQuery dataset.
-    bq.prep_dataset(project_id=config.project_id, dataset_id=config.cdm_dataset_id)
+    bq.prep_dataset(project_id=config.project_id, dataset_id=config.cdm_dataset_id, site=site, delivery_date=delivery_date)
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def load_harmonized_tables(site_to_process: tuple[str, str]) -> None:
     """
-    Load all harmonized vocabulary tables to BigQuery
+    Load all harmonized vocabulary tables to BigQuery.
+
+    Skips if no harmonized tables are available (i.e., no clinical tables in delivery).
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
+    log_ctx = utils.format_log_context(site=site, delivery_date=delivery_date)
 
-    bq.load_harmonized_tables_to_bq(
-        gcs_bucket=config.gcs_bucket,
-        delivery_date=delivery_date,
-        project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id
-    )
+    try:
+        bq.load_harmonized_tables_to_bq(
+            gcs_bucket=config.gcs_bucket,
+            delivery_date=delivery_date,
+            project_id=config.project_id,
+            dataset_id=config.cdm_dataset_id,
+            site=site
+        )
+    except Exception as e:
+        # Check if error is due to no harmonized files existing
+        error_msg = str(e)
+        if "No table directories found" in error_msg or "No harmonized tables found" in error_msg:
+            utils.logger.info(f"{log_ctx}No harmonized tables found; skipping load (no clinical tables in delivery)")
+            raise AirflowSkipException(f"No harmonized tables to load for {site}")
+        else:
+            # Re-raise other errors
+            raise
     
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
@@ -517,7 +548,7 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
     Load all target vocabulary tables to BigQuery
     If the site's overwrite_site_vocab_with_standard is False, the site's vocab tables will overwrite default tables loaded by this task
     """
-    site, _ = site_to_process
+    site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
     if config.overwrite_site_vocab_with_standard:
@@ -526,7 +557,9 @@ def load_target_vocab(site_to_process: tuple[str, str]) -> None:
                 vocab_version=constants.OMOP_TARGET_VOCAB_VERSION,
                 table_file_name=vocab_table,
                 project_id=config.project_id,
-                dataset_id=config.cdm_dataset_id
+                dataset_id=config.cdm_dataset_id,
+                site=site,
+                delivery_date=delivery_date
             )
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
@@ -537,18 +570,19 @@ def load_remaining(file_config_dict: dict) -> None:
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
     config = SiteConfig(site=fc.site)
+    log_ctx = format_log_context(site=fc.site, delivery_date=fc.delivery_date, file=fc.table_name)
 
     # Don't load standard vocabulary files if using site-specific vocabulary
     if config.overwrite_site_vocab_with_standard and fc.table_name in constants.VOCABULARY_TABLES:
-        utils.logger.info(f"Skip loading {fc.table_name} to BigQuery")
+        utils.logger.info(f"{log_ctx}Skipping vocabulary table load; using site-specific vocabulary")
         raise AirflowSkipException
 
     # Also skip vocab harmonized tables since they were already loaded in harmonize_vocab task
     elif fc.table_name in constants.VOCAB_HARMONIZED_TABLES:
-        utils.logger.info(f"Skip loading {fc.table_name} to BigQuery")
+        utils.logger.info(f"{log_ctx}Skipping load; already loaded in harmonize_vocab task")
         raise AirflowSkipException
     elif fc.table_name == "cdm_source":
-        utils.logger.info(f"Skip loading {fc.table_name} to BigQuery; handled in subsequent cleanup task")
+        utils.logger.info(f"{log_ctx}Skipping load; will be handled in cleanup task")
         raise AirflowSkipException
     else:
         bq.load_individual_parquet_to_bq(
@@ -556,7 +590,9 @@ def load_remaining(file_config_dict: dict) -> None:
             project_id=config.project_id,
             dataset_id=config.cdm_dataset_id,
             table_name=fc.table_name,
-            write_type=constants.BQWriteTypes.PROCESSED_FILE
+            write_type=constants.BQWriteTypes.PROCESSED_FILE,
+            site=fc.site,
+            delivery_date=fc.delivery_date
         )
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
@@ -575,7 +611,8 @@ def load_derived_tables(site_to_process: tuple[str, str]) -> None:
         gcs_bucket=config.gcs_bucket,
         delivery_date=delivery_date,
         project_id=config.project_id,
-        dataset_id=config.cdm_dataset_id
+        dataset_id=config.cdm_dataset_id,
+        site=site
     )
 
 @task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
@@ -589,19 +626,18 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
     for site, delivery_date in sites_to_process:
         config = SiteConfig(site=site)
         run_id = TaskContext.get_run_id()
+        log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
         try:
             bq.bq_log_running(site=site, delivery_date=delivery_date, run_id=run_id)
-
-            # Generate final data delivery report
-            report_data = omop.generate_report_json(site=site, delivery_date=delivery_date)
-            validation.generate_delivery_report(report_data=report_data)
 
             # Create empty tables for OMOP files not provided in delivery
             omop.create_missing_omop_tables(
                 project_id=config.project_id,
                 dataset_id=config.cdm_dataset_id,
-                omop_version=constants.OMOP_TARGET_CDM_VERSION
+                omop_version=constants.OMOP_TARGET_CDM_VERSION,
+                site=site,
+                delivery_date=delivery_date
             )
 
             # Load cdm_source file to BigQuery (guaranteed to exist after populate_cdm_source_file task)
@@ -611,22 +647,56 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
                 project_id=config.project_id,
                 dataset_id=config.cdm_dataset_id,
                 table_name="cdm_source",
-                write_type=constants.BQWriteTypes.PROCESSED_FILE
+                write_type=constants.BQWriteTypes.PROCESSED_FILE,
+                site=site,
+                delivery_date=delivery_date
             )
 
-            utils.logger.info(f"Final CDM cleanup completed for {site} delivery {delivery_date}")
+            utils.logger.info(f"{log_ctx}CDM cleanup and setup completed successfully")
         except Exception as e:
             bq.bq_log_error(site=site, delivery_date=delivery_date, run_id=run_id, message=str(e))
-            raise Exception(f"Unable to perform CDM cleanup: {e}") from e
+            raise Exception(f"{log_ctx}Unable to perform CDM cleanup: {e}") from e
+
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@log_task_execution()
+def generate_report_csv(site_to_process: tuple[str, str]) -> None:
+    """
+    Generate delivery report CSV file with processing metadata and statistics.
+
+    This CSV file serves as the data source for visual reporting and dashboards.
+    The report includes metadata, row counts, vocabulary breakdowns, and type concept distributions.
+    """
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+
+    utils.logger.info(f"{log_ctx}Generating delivery report CSV")
+
+    # Execute report generation via Cloud Run Job
+    processing_jobs.run_generate_report_csv_job(
+        site=site,
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        site_display_name=config.display_name,
+        file_delivery_format=config.file_delivery_format,
+        delivered_cdm_version=config.omop_version,
+        target_vocabulary_version=constants.OMOP_TARGET_VOCAB_VERSION,
+        target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
+        project_id=config.project_id,
+        context=TaskContext.get_context()
+    )
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
 @log_task_execution()
 def dqd(site_to_process: tuple[str, str]) -> None:
+    """Execute the Data Quality Dashboard (DQD) checks via Cloud Run Job."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
-    utils.logger.info(f"Triggering DQD checks for {site} data delivered on {delivery_date}")
+    utils.logger.info(f"{log_ctx}Triggering DQD (Data Quality Dashboard) checks")
 
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.DQD.value}"
 
@@ -638,16 +708,21 @@ def dqd(site_to_process: tuple[str, str]) -> None:
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        site=site,
+        delivery_date=delivery_date
     )
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
 @log_task_execution()
 def achilles(site_to_process: tuple[str, str]) -> None:
+    
+
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
-    utils.logger.info(f"Triggering Achilles analyses for {site} data delivered on {delivery_date}")
+    utils.logger.info(f"{log_ctx}Triggering Achilles analyses")
 
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.ACHILLES.value}"
 
@@ -660,22 +735,28 @@ def achilles(site_to_process: tuple[str, str]) -> None:
         gcs_artifact_path=gcs_artifact_path,
         cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         cdm_source_name=config.display_name,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        site=site,
+        delivery_date=delivery_date
     )
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
+    """Run Atlas results tables creation via API endpoint."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
-    utils.logger.info(f"Creating Atlas results tables for {site} data delivered on {delivery_date}")
+    utils.logger.info(f"{log_ctx}Creating Atlas results tables")
 
     # Create Atlas results tables via API endpoint
     analysis.create_atlas_results_tables(
         project_id=config.project_id,
         cdm_dataset_id=config.cdm_dataset_id,
-        analytics_dataset_id=config.analytics_dataset_id
+        analytics_dataset_id=config.analytics_dataset_id,
+        site=site,
+        delivery_date=delivery_date
     )
 
 @task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
@@ -808,6 +889,9 @@ with dag:
 
     clean = cleanup(sites_to_process=unprocessed_sites)
 
+    # Generate delivery report CSV file
+    run_report = generate_report_csv.expand(site_to_process=unprocessed_sites)
+
     # Run Data Quality Dashboard after loading data
     run_dqd = dqd.expand(site_to_process=unprocessed_sites)
 
@@ -842,5 +926,5 @@ with dag:
     # Continue with remaining tasks after loading dataset
     load_to_bigquery_group >> clean
 
-    # Run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
-    clean >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done
+    # Generate report CSV, then run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
+    clean >> run_report >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done

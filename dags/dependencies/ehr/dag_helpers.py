@@ -190,3 +190,10 @@ def extract_site_and_date(site_to_process: tuple[str, str]) -> tuple[str, str]:
         Tuple of (site, delivery_date)
     """
     return site_to_process
+
+
+# Re-export logging utility functions from utils module
+# These are defined in utils.py to avoid circular imports
+format_log_context = utils.format_log_context
+extract_context_from_file_config = utils.extract_context_from_file_config
+extract_context_from_site_tuple = utils.extract_context_from_site_tuple
