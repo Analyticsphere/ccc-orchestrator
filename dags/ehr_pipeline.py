@@ -55,7 +55,7 @@ def check_api_health() -> None:
         raise
 
 
-@task(execution_timeout=timedelta(minutes=30))
+@task(execution_timeout=timedelta(minutes=15))
 def id_sites_to_process() -> list[tuple[str, str]]:
     """
     Identify sites with unprocessed or errored deliveries.
@@ -89,7 +89,7 @@ def end_if_all_processed(unprocessed_sites: list[tuple[str, str]]) -> bool:
     return True
 
 
-@task(execution_timeout=timedelta(minutes=15), trigger_rule="none_failed")
+@task(execution_timeout=timedelta(minutes=30), trigger_rule="none_failed")
 def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]:
     """
     Obtains list of EHR data files that need to be processed.
