@@ -658,7 +658,7 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"{log_ctx}Unable to perform CDM cleanup: {e}") from e
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
 @log_task_execution()
 def generate_report_csv(site_to_process: tuple[str, str]) -> None:
     """
