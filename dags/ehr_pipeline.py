@@ -658,7 +658,7 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"{log_ctx}Unable to perform CDM cleanup: {e}") from e
 
 
-@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
 @log_task_execution()
 def generate_report_csv(site_to_process: tuple[str, str]) -> None:
     """
@@ -757,6 +757,23 @@ def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
         analytics_dataset_id=config.analytics_dataset_id,
         site=site,
         delivery_date=delivery_date
+    )
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
+@log_task_execution()
+def generate_delivery_report(site_to_process: tuple[str, str]) -> None:
+    """Generate interactive HTML delivery report via API endpoint."""
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+
+    utils.logger.info(f"{log_ctx}Generating interactive HTML delivery report")
+
+    # Generate delivery report via API endpoint
+    analysis.generate_delivery_report(
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        site=site
     )
 
 @task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
@@ -901,6 +918,9 @@ with dag:
     # Create Atlas results tables after analyses complete
     create_atlas_tables = atlas_results_tables.expand(site_to_process=unprocessed_sites)
 
+    # Generate interactive HTML delivery report after analyses complete
+    gen_delivery_report = generate_delivery_report.expand(site_to_process=unprocessed_sites)
+
     # Mark deliveries as complete after all analyses finish
     mark_complete = mark_delivery_complete(sites_to_process=unprocessed_sites)
 
@@ -926,5 +946,12 @@ with dag:
     # Continue with remaining tasks after loading dataset
     load_to_bigquery_group >> clean
 
-    # Generate report CSV, then run analytics tasks in parallel, then create Atlas tables, mark complete, then final logging
-    clean >> run_report >> [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete >> all_done
+    # Generate report CSV, then run analytics tasks in parallel
+    clean >> run_report >> [run_dqd, run_achilles]
+
+    # After analytics complete, create Atlas tables and generate delivery report in parallel
+    [run_dqd, run_achilles] >> create_atlas_tables >> mark_complete
+    [run_dqd, run_achilles] >> gen_delivery_report >> mark_complete
+
+    # Final logging
+    mark_complete >> all_done

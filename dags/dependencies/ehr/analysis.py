@@ -147,7 +147,7 @@ def create_atlas_results_tables(
     Raises:
         Exception: If API call fails
     """
-    
+
     log_ctx = utils.format_log_context(site=site, delivery_date=delivery_date)
     utils.logger.info(f"{log_ctx}Creating Atlas results tables in: {project_id}.{analytics_dataset_id}")
 
@@ -170,4 +170,61 @@ def create_atlas_results_tables(
         utils.logger.info(f"{log_ctx}Atlas results tables created successfully in: {project_id}.{analytics_dataset_id}")
     else:
         error_msg = f"{log_ctx}Failed to create Atlas results tables: {response}"
+        raise Exception(error_msg)
+
+
+def generate_delivery_report(
+    gcs_bucket: str,
+    delivery_date: str,
+    site: str
+) -> None:
+    """
+    Generate interactive HTML delivery report by calling the OMOP analyzer API.
+
+    This function constructs the appropriate GCS paths for the delivery report CSV,
+    DQD results CSV, and output HTML file, then calls the generate_delivery_report
+    endpoint to create a comprehensive visual report.
+
+    Args:
+        gcs_bucket: GCS bucket path (e.g., "synthea_cdm53")
+        delivery_date: Delivery date string (e.g., "2025-01-01")
+        site: Site identifier (e.g., "synthea_53")
+
+    Raises:
+        Exception: If API call fails
+    """
+    log_ctx = utils.format_log_context(site=site, delivery_date=delivery_date)
+    utils.logger.info(f"{log_ctx}Generating OMOP delivery report")
+
+    # Construct file paths
+    delivery_report_csv = f"delivery_report_{site}_{delivery_date}.csv"
+    delivery_report_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.REPORT.value}{delivery_report_csv}"
+    dqd_results_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.DQD.value}dqdashboard_results.csv"
+    output_gcs_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.REPORT.value}omop_delivery_report.html"
+
+    utils.logger.info(f"{log_ctx}Input paths:")
+    utils.logger.info(f"{log_ctx}  - Delivery report: {delivery_report_path}")
+    utils.logger.info(f"{log_ctx}  - DQD results: {dqd_results_path}")
+    utils.logger.info(f"{log_ctx}Output path: {output_gcs_path}")
+
+    # Call the API endpoint
+    response = utils.make_api_call(
+        url=constants.OMOP_ANALYZER_ENDPOINT,
+        endpoint="generate_delivery_report",
+        method="post",
+        json_data={
+            "delivery_report_path": delivery_report_path,
+            "dqd_results_path": dqd_results_path,
+            "output_gcs_path": output_gcs_path
+        },
+        timeout=1800,  # 30 minute timeout
+        site=site,
+        delivery_date=delivery_date
+    )
+
+    if response and response.get('status') == 'success':
+        utils.logger.info(f"{log_ctx}OMOP delivery report generated successfully!")
+        utils.logger.info(f"{log_ctx}Report saved to: {output_gcs_path}")
+    else:
+        error_msg = f"{log_ctx}Failed to generate OMOP delivery report: {response}"
         raise Exception(error_msg)
