@@ -92,6 +92,7 @@ class ArtifactPaths(str, Enum):
     DQD = f"{ARTIFACTS}dqd/"
     ACHILLES = f"{ARTIFACTS}achilles/"
     INVALID_ROWS = f"{ARTIFACTS}invalid_rows/"
+    PASS = f"{ARTIFACTS}PASS/"
 
 class BQWriteTypes(str, Enum):
     # SPECIFIC_FILE -> overwrite table with the exact Parquet file in file_path
