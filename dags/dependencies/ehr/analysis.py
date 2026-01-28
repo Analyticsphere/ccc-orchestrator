@@ -124,6 +124,57 @@ def run_achilles_job(
     utils.logger.info(f"{log_ctx}Achilles Cloud Run Job completed successfully for: {project_id}.{dataset_id}")
 
 
+def run_pass_job(
+    project_id: str,
+    dataset_id: str,
+    gcs_artifact_path: str,
+    context,
+    site: str = None,
+    delivery_date: str = None
+) -> None:
+    """
+    Execute PASS (Profile of Analytic Suitability Score) via Cloud Run Job.
+
+    PASS runs quality assessment across six dimensions to evaluate data fitness
+    for research.
+
+    Args:
+        project_id: Google Cloud project ID
+        dataset_id: BigQuery CDM dataset ID (where PASS reads CDM data from)
+        gcs_artifact_path: GCS path for artifacts (e.g., "gs://bucket/delivery_date/artifacts/pass/")
+        context: Airflow task context
+        site: Optional site identifier for logging context
+        delivery_date: Optional delivery date for logging context
+
+    Raises:
+        Exception: If Cloud Run Job fails
+    """
+    log_ctx = utils.format_log_context(site=site, delivery_date=delivery_date)
+    utils.logger.info(f"{log_ctx}Executing PASS (Profile of Analytic Suitability Score) Cloud Run Job for: {project_id}.{dataset_id}")
+
+    # Create and execute Cloud Run Job operator
+    operator = CloudRunExecuteJobOperator(
+        task_id=f'pass_job_{dataset_id}',
+        project_id=project_id,
+        region='us-central1',
+        job_name='ccc-omop-analyzer-pass-job',
+        overrides={
+            'container_overrides': [{
+                'env': [
+                    {'name': 'PROJECT_ID', 'value': project_id},
+                    {'name': 'CDM_DATASET_ID', 'value': dataset_id},
+                    {'name': 'GCS_ARTIFACT_PATH', 'value': gcs_artifact_path}
+                ]
+            }]
+        },
+        deferrable=False  # Blocking execution - waits for job completion
+    )
+
+    # Execute the Cloud Run Job
+    operator.execute(context=context)
+    utils.logger.info(f"{log_ctx}PASS Cloud Run Job completed successfully for: {project_id}.{dataset_id}")
+
+
 def create_atlas_results_tables(
     project_id: str,
     cdm_dataset_id: str,
