@@ -15,7 +15,7 @@ def run_dqd_job(
     delivery_date: str = None
 ) -> None:
     """
-    Execute DQD (Data Quality Dashboard) via Cloud Run Job.
+    Execute DQD (Data Quality Dashboard) .
 
     DQD runs can take 2+ hours, exceeding the 1-hour Cloud Run service timeout.
     This function triggers a Cloud Run Job that can run up to 24 hours.
@@ -75,7 +75,7 @@ def run_achilles_job(
     delivery_date: str = None
 ) -> None:
     """
-    Execute Achilles analyses via Cloud Run Job.
+    Execute Achilles analyses .
 
     Achilles runs can take 2+ hours, exceeding the 1-hour Cloud Run service timeout.
     This function triggers a Cloud Run Job that can run up to 24 hours.
@@ -133,7 +133,7 @@ def run_pass_job(
     delivery_date: str = None
 ) -> None:
     """
-    Execute PASS (Profile of Analytic Suitability Score) via Cloud Run Job.
+    Execute PASS (Profile of Analytic Suitability Score)
 
     PASS runs quality assessment across six dimensions to evaluate data fitness
     for research.

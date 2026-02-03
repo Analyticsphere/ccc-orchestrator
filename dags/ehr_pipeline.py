@@ -142,7 +142,7 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
 @log_task_execution()
 def convert_file(file_config_dict: dict) -> None:
     """
-    Create optimized version of incoming EHR data file via Cloud Run Job.
+    Create optimized version of incoming EHR data file.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
     config = SiteConfig(site=fc.site)
@@ -176,7 +176,7 @@ def validate_file(file_config_dict: dict) -> None:
 @log_task_execution()
 def normalize_file(file_config_dict: dict) -> None:
     """
-    Standardize OMOP data file structure via Cloud Run Job.
+    Standardize OMOP data file structure.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
     config = SiteConfig(site=fc.site)
@@ -198,7 +198,7 @@ def normalize_file(file_config_dict: dict) -> None:
 @log_task_execution()
 def cdm_upgrade(file_config_dict: dict) -> None:
     """
-    Upgrade CDM version (currently supports 5.3 -> 5.4) via Cloud Run Job.
+    Upgrade CDM version (currently supports 5.3 -> 5.4).
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
     config = SiteConfig(site=fc.site)
@@ -241,7 +241,7 @@ def populate_cdm_source_file(site_to_process: tuple[str, str]) -> None:
 @log_task_execution()
 def harmonize_vocab_source_target(file_config_dict: dict) -> None:
     """
-    Step 1: Execute source_target vocabulary harmonization via Cloud Run Job.
+    Step 1: Execute source_target vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -254,7 +254,7 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute source_target step via Cloud Run Job
+    # Execute source_target step
     processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
@@ -270,7 +270,7 @@ def harmonize_vocab_source_target(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
     """
-    Step 2: Execute target_remap vocabulary harmonization via Cloud Run Job.
+    Step 2: Execute target_remap vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -281,7 +281,7 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute target_remap step via Cloud Run Job
+    # Execute target_remap step
     processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
@@ -297,7 +297,7 @@ def harmonize_vocab_target_remap(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
     """
-    Step 3: Execute target_replacement vocabulary harmonization via Cloud Run Job.
+    Step 3: Execute target_replacement vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -308,7 +308,7 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute target_replacement step via Cloud Run Job
+    # Execute target_replacement step
     processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
@@ -324,7 +324,7 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
     """
-    Step 4: Execute domain_check vocabulary harmonization via Cloud Run Job.
+    Step 4: Execute domain_check vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -335,7 +335,7 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute domain_check step via Cloud Run Job
+    # Execute domain_check step
     processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
@@ -351,7 +351,7 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
     """
-    Step 5: Execute omop_etl vocabulary harmonization via Cloud Run Job.
+    Step 5: Execute omop_etl vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -362,7 +362,7 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
     # Get configuration parameters
     config = SiteConfig(site=fc.site)
 
-    # Execute omop_etl step via Cloud Run Job
+    # Execute omop_etl step
     processing_jobs.run_harmonize_vocab_job(
         file_path=fc.file_path,
         site=fc.site,
@@ -378,13 +378,13 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
     """
-    Step 6: Combine and deduplicate ETL files after vocabulary harmonization via Cloud Run Job.
+    Step 6: Combine and deduplicate ETL files after vocabulary harmonization.
     This occurs once per site; not per file
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Execute consolidation step via Cloud Run Job
+    # Execute consolidation step
     processing_jobs.run_harmonize_vocab_job(
         file_path=storage.get_uri(f"{config.gcs_bucket}/{delivery_date}/dummy_value_for_consolidation"),
         site=site,
@@ -400,13 +400,13 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 @log_task_execution()
 def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[dict]:
     """
-    Step 7: Discover all tables that need primary key deduplication via Cloud Run Job.
+    Step 7: Discover all tables that need primary key deduplication.
     This occurs once per site and returns a list of table configurations for parallel processing.
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
 
-    # Discover all tables that need deduplication via Cloud Run Job
+    # Discover all tables that need deduplication
     table_configs = processing_jobs.run_discover_tables_job(
         file_path=storage.get_uri(f"{config.gcs_bucket}/{delivery_date}/dummy_value_for_discovery"),
         site=site,
@@ -439,10 +439,10 @@ def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]
 @log_task_execution()
 def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
     """
-    Step 8: Deduplicate primary keys for a single table via Cloud Run Job.
+    Step 8: Deduplicate primary keys for a single table.
     This runs in parallel for each table that needs deduplication.
     """
-    # Deduplicate primary keys for this specific table via Cloud Run Job
+    # Deduplicate primary keys for this specific table
     processing_jobs.run_deduplicate_table_job(
         table_config=table_config,
         context=TaskContext.get_context()
@@ -472,7 +472,7 @@ def create_derived_table_configs(sites_to_process: list[tuple[str, str]]) -> lis
 @log_task_execution()
 def generate_single_derived_table(derived_config: dict) -> None:
     """
-    Generate a single derived table from HARMONIZED data via Cloud Run Job.
+    Generate a single derived table from HARMONIZED data.
 
     This task is called AFTER vocabulary harmonization is complete and reads from harmonized
     Parquet files in omop_etl/. The derived table is written to derived_files/ and will be
@@ -673,7 +673,7 @@ def generate_report_csv(site_to_process: tuple[str, str]) -> None:
 
     utils.logger.info(f"{log_ctx}Generating delivery report CSV")
 
-    # Execute report generation via Cloud Run Job
+    # Execute report generation
     processing_jobs.run_generate_report_csv_job(
         site=site,
         gcs_bucket=config.gcs_bucket,
@@ -691,7 +691,7 @@ def generate_report_csv(site_to_process: tuple[str, str]) -> None:
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
 @log_task_execution()
 def dqd(site_to_process: tuple[str, str]) -> None:
-    """Execute the Data Quality Dashboard (DQD) checks via Cloud Run Job."""
+    """Execute the Data Quality Dashboard (DQD) checks."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
@@ -700,7 +700,7 @@ def dqd(site_to_process: tuple[str, str]) -> None:
 
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.DQD.value}"
 
-    # Execute DQD via Cloud Run Job
+    # Execute DQD
     analysis.run_dqd_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
@@ -726,8 +726,7 @@ def achilles(site_to_process: tuple[str, str]) -> None:
 
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.ACHILLES.value}"
 
-    # Execute Achilles via Cloud Run Job
-    # Achilles reads CDM data from cdm_dataset_id and writes results to analytics_dataset_id
+    # Execute Achilles
     analysis.run_achilles_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
@@ -743,7 +742,7 @@ def achilles(site_to_process: tuple[str, str]) -> None:
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=3))
 @log_task_execution()
 def pass_analysis(site_to_process: tuple[str, str]) -> None:
-    """Execute PASS (Profile of Analytic Suitability Score) analysis via Cloud Run Job."""
+    """Execute PASS (Profile of Analytic Suitability Score) analysis."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
@@ -752,8 +751,7 @@ def pass_analysis(site_to_process: tuple[str, str]) -> None:
 
     gcs_artifact_path = f"{config.gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.PASS_ANALYSIS.value}"
 
-    # Execute PASS via Cloud Run Job
-    # PASS reads CDM data from cdm_dataset_id to evaluate data quality across six dimensions
+    # Execute PASS
     analysis.run_pass_job(
         project_id=config.project_id,
         dataset_id=config.cdm_dataset_id,
@@ -766,14 +764,14 @@ def pass_analysis(site_to_process: tuple[str, str]) -> None:
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
-    """Run Atlas results tables creation via API endpoint."""
+    """Run Atlas results tables creation job."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
     utils.logger.info(f"{log_ctx}Creating Atlas results tables")
 
-    # Create Atlas results tables via API endpoint
+    # Create Atlas results tables
     analysis.create_atlas_results_tables(
         project_id=config.project_id,
         cdm_dataset_id=config.cdm_dataset_id,
@@ -785,14 +783,14 @@ def atlas_results_tables(site_to_process: tuple[str, str]) -> None:
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=30))
 @log_task_execution()
 def generate_delivery_report(site_to_process: tuple[str, str]) -> None:
-    """Generate interactive HTML delivery report via API endpoint."""
+    """Generate interactive HTML delivery report."""
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
     utils.logger.info(f"{log_ctx}Generating interactive HTML delivery report")
 
-    # Generate delivery report via API endpoint
+    # Generate delivery report
     analysis.generate_delivery_report(
         gcs_bucket=config.gcs_bucket,
         delivery_date=delivery_date,
