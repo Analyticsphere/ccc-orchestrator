@@ -233,8 +233,8 @@ def generate_delivery_report(
     Generate interactive HTML delivery report by calling the OMOP analyzer API.
 
     This function constructs the appropriate GCS paths for the delivery report CSV,
-    DQD results CSV, and output HTML file, then calls the generate_delivery_report
-    endpoint to create a comprehensive visual report.
+    DQD results CSV, PASS results directory, and output HTML file, then calls the
+    generate_delivery_report endpoint to create a comprehensive visual report.
 
     Args:
         gcs_bucket: GCS bucket path (e.g., "synthea_cdm53")
@@ -251,11 +251,13 @@ def generate_delivery_report(
     delivery_report_csv = f"delivery_report_{site}_{delivery_date}.csv"
     delivery_report_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.REPORT.value}{delivery_report_csv}"
     dqd_results_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.DQD.value}dqdashboard_results.csv"
+    pass_results_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.PASS_ANALYSIS.value}"
     output_gcs_path = f"gs://{gcs_bucket}/{delivery_date}/{constants.ArtifactPaths.REPORT.value}omop_delivery_report.html"
 
     utils.logger.info(f"{log_ctx}Input paths:")
     utils.logger.info(f"{log_ctx}  - Delivery report: {delivery_report_path}")
     utils.logger.info(f"{log_ctx}  - DQD results: {dqd_results_path}")
+    utils.logger.info(f"{log_ctx}  - PASS results: {pass_results_path}")
     utils.logger.info(f"{log_ctx}Output path: {output_gcs_path}")
 
     # Call the API endpoint
@@ -266,7 +268,8 @@ def generate_delivery_report(
         json_data={
             "delivery_report_path": delivery_report_path,
             "dqd_results_path": dqd_results_path,
-            "output_gcs_path": output_gcs_path
+            "output_gcs_path": output_gcs_path,
+            "pass_results_path": pass_results_path
         },
         timeout=1800,  # 30 minute timeout
         site=site,
