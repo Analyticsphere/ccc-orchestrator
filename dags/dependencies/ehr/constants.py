@@ -81,6 +81,7 @@ class FileConfig(str, Enum):
     DATE_FORMAT = "date_format"
     DATETIME_FORMAT = "datetime_format"
     OVERWRITE_SITE_VOCAB_WITH_STANDARD = "overwrite_site_vocab_with_standard"
+    SITE_CONNECT_ID = "site_connect_id"
 
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"

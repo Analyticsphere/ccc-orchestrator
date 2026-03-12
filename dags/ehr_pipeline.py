@@ -150,7 +150,9 @@ def retrieve_connect_data(site_to_process: tuple[str, str]) -> None:
     processing.get_connect_data(
         project_id=config.project_id,
         delivery_bucket=f"{config.gcs_bucket}/{delivery_date}",
-        site=site
+        site_connect_id=config.site_connect_id,
+        site=site,
+        delivery_date=delivery_date
     )
 
 

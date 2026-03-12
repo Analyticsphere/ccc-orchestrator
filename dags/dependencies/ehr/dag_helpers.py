@@ -74,6 +74,11 @@ class SiteConfig:
             True
         )
 
+    @property
+    def site_connect_id(self) -> Optional[int]:
+        """Per-site Connect identifier, if configured."""
+        return self._config.get(constants.FileConfig.SITE_CONNECT_ID.value)
+
 
 class TaskContext:
     """

@@ -74,7 +74,9 @@ def get_connect_data(
     project_id: str,
     dataset_id: str = constants.CONNECT_DATASET_ID,
     delivery_bucket: str = None,
+    site_connect_id: int = None,
     site: str = None,
+    delivery_date: str = None,
 ) -> None:
     """
     Export Connect study data for a site delivery.
@@ -83,6 +85,7 @@ def get_connect_data(
         project_id: BigQuery project ID
         dataset_id: BigQuery dataset ID
         delivery_bucket: Full GCS delivery bucket path (bucket/delivery_date)
+        site_connect_id: Per-site Connect identifier
         site: Optional site identifier for logging context
         delivery_date: Optional delivery date for logging context
     """
@@ -95,10 +98,11 @@ def get_connect_data(
         json_data={
             "project_id": project_id,
             "dataset_id": dataset_id,
-            "delivery_bucket": delivery_bucket
+            "delivery_bucket": delivery_bucket,
+            "site_connect_id": site_connect_id
         },
         site=site,
-        )
+    )
 
 def process_file(file_type: str, gcs_file_path: str, site: str = None, delivery_date: str = None) -> None:
     """

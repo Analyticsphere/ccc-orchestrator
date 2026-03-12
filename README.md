@@ -62,6 +62,7 @@ site:
     date_format: "%Y-%m-%d"                # date format used by site
     datetime_format: "%Y-%m-%d %H:%M:%S"   # datetime format used by site
     overwrite_site_vocab_with_standard: true # default true; if false, site vocab overwrites standard
+    site_connect_id: 123456789             # per-site Connect identifier used by retrieve_connect_data
 ```
 
 ### Environment Variables
@@ -73,6 +74,7 @@ Set as environment variables in Composer. Defaults shown are from `constants.py`
 - OMOP_TARGET_VOCAB_VERSION: Required. Target vocabulary version string (e.g., "v5.0 27-AUG-25")
 - OMOP_TARGET_CDM_VERSION: Required. Target OMOP CDM version (e.g., "5.4")
 - OMOP_VOCAB_GCS_PATH: Required. GCS path to vocab distribution (e.g., gs://<bucket>/vocab/<version>)
+- CONNECT_DATASET_ID: Required for Connect export. BigQuery dataset containing Connect study source data
 
 The site config file path is fixed in code to `/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml`.
 
