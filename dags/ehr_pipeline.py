@@ -138,6 +138,22 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
     return file_configs
 
 
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
+@log_task_execution()
+def retrieve_connect_data(site_to_process: tuple[str, str]) -> None:
+    """
+    Export required Connect study data once per site delivery before file conversion begins.
+    """
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+
+    processing.get_connect_data(
+        project_id=config.project_id,
+        delivery_bucket=f"{config.gcs_bucket}/{delivery_date}",
+        site=site
+    )
+
+
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def convert_file(file_config_dict: dict) -> None:
@@ -865,6 +881,7 @@ with dag:
     unprocessed_sites = id_sites_to_process()
     sites_exist = end_if_all_processed(unprocessed_sites)
     file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
+    connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
     
     # Expand the processing tasks across the list of file configurations.
     process_files = convert_file.expand(file_config_dict=file_list)
@@ -956,7 +973,7 @@ with dag:
 
     # Set task dependencies
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
+    file_list >> connect_data >> process_files >> validate_files >> fix_data_file >> upgrade_file
 
     # Populate cdm_source file after upgrade, before vocab harmonization
     upgrade_file >> populate_cdm_source_files >> vocab_harmonization_group

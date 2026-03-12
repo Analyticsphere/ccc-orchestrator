@@ -70,6 +70,36 @@ def create_artifact_directories(delivery_bucket: str, site: str = None, delivery
         delivery_date=delivery_date
     )
 
+def get_connect_data(
+    project_id: str,
+    dataset_id: str = constants.CONNECT_DATASET_ID,
+    delivery_bucket: str = None,
+    site: str = None,
+) -> None:
+    """
+    Export Connect study data for a site delivery.
+
+    Args:
+        project_id: BigQuery project ID
+        dataset_id: BigQuery dataset ID
+        delivery_bucket: Full GCS delivery bucket path (bucket/delivery_date)
+        site: Optional site identifier for logging context
+        delivery_date: Optional delivery date for logging context
+    """
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+    utils.logger.info(f"{log_ctx}Exporting Connect study data to Parquet")
+
+    utils.make_api_call(
+        url=constants.OMOP_PROCESSOR_ENDPOINT,
+        endpoint="get_connect_data",
+        json_data={
+            "project_id": project_id,
+            "dataset_id": dataset_id,
+            "delivery_bucket": delivery_bucket
+        },
+        site=site,
+        )
+
 def process_file(file_type: str, gcs_file_path: str, site: str = None, delivery_date: str = None) -> None:
     """
     Create optimized version of incoming EHR data file.
@@ -126,4 +156,3 @@ def normalize_parquet_file(file_path: str, cdm_version: str, date_format: str, d
         delivery_date=delivery_date,
         file=file
     )
-

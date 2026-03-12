@@ -7,16 +7,17 @@ An Apache Airflow pipeline for processing Electronic Health Record (EHR) data co
 Designed for Google Cloud Composer (managed Airflow), the DAG orchestrates the following:
 
 1. Discovers the latest date-based deliveries in per-site GCS buckets
-2. Converts incoming CSV/CSV.GZ files to optimized Parquet
-3. Validates files against OMOP CDM schema
-4. Normalizes data types/formats
-5. Upgrades CDM versions if needed (e.g., 5.3 → 5.4)
-6. Harmonizes vocabularies across clinical tables (multi-step)
-7. Loads harmonized and remaining tables to BigQuery
-8. Generates derived data tables and a delivery report; completes CDM metadata
-9. Executes OHDSI DataQualityDashboard (DQD) checks via Cloud Run Job
-10. Executes OHDSI Achilles analyses via Cloud Run Job
-11. Creates Atlas results tables for OHDSI tools integration
+2. Exports Connect study data once per site delivery
+3. Converts incoming CSV/CSV.GZ files to optimized Parquet
+4. Validates files against OMOP CDM schema
+5. Normalizes data types/formats
+6. Upgrades CDM versions if needed (e.g., 5.3 → 5.4)
+7. Harmonizes vocabularies across clinical tables (multi-step)
+8. Loads harmonized and remaining tables to BigQuery
+9. Generates derived data tables and a delivery report; completes CDM metadata
+10. Executes OHDSI DataQualityDashboard (DQD) checks via Cloud Run Job
+11. Executes OHDSI Achilles analyses via Cloud Run Job
+12. Creates Atlas results tables for OHDSI tools integration
 
 The DAG id is `ehr-pipeline`.
 
@@ -83,6 +84,7 @@ Main tasks and groups in `ehr_pipeline.py`:
 - id_sites_to_process: Identify sites with unprocessed/errored deliveries and generate optimized vocab if needed
 - end_if_all_processed: Short-circuit when no sites to process
 - get_unprocessed_files: Build list of files to process and log pipeline start per site
+- retrieve_connect_data: Export Connect study data once per site before file conversion
 - convert_file: Convert CSV/CSV.GZ to Parquet
 - validate_file: Validate against OMOP CDM schema
 - normalize_file: Standardize data types and formats
