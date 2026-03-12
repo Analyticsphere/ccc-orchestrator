@@ -213,8 +213,8 @@ def create_atlas_results_tables(
             "analytics_dataset_id": analytics_dataset_id
         },
         timeout=300,  # 5 minute timeout
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
     if response and response.get('status') == 'success':
@@ -272,8 +272,8 @@ def generate_delivery_report(
             "pass_results_path": pass_results_path
         },
         timeout=1800,  # 30 minute timeout
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
     if response and response.get('status') == 'success':

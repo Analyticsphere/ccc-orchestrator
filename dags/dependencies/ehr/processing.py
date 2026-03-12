@@ -34,8 +34,8 @@ def get_file_list(site: str, delivery_date: str, file_format: str) -> list[str]:
                 "folder": delivery_date,
                 "file_format": file_format
             },
-            site=site,
-            delivery_date=delivery_date
+            log_site=site,
+            log_delivery_date=delivery_date
         )
 
         if response and 'file_list' in response:
@@ -66,8 +66,8 @@ def create_artifact_directories(delivery_bucket: str, site: str = None, delivery
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="create_artifact_directories",
         json_data={"delivery_bucket": delivery_bucket},
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
 def get_connect_data(
@@ -101,7 +101,7 @@ def get_connect_data(
             "delivery_bucket": delivery_bucket,
             "site_connect_id": site_connect_id
         },
-        site=site,
+        log_site=site,
     )
 
 def process_file(file_type: str, gcs_file_path: str, site: str = None, delivery_date: str = None) -> None:
@@ -125,9 +125,9 @@ def process_file(file_type: str, gcs_file_path: str, site: str = None, delivery_
             "file_type": file_type,
             "file_path": gcs_file_path
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=file_type
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=file_type
     )
 
 def normalize_parquet_file(file_path: str, cdm_version: str, date_format: str, datetime_format: str, site: str = None, delivery_date: str = None, file: str = None) -> None:
@@ -156,7 +156,7 @@ def normalize_parquet_file(file_path: str, cdm_version: str, date_format: str, d
             "date_format": date_format,
             "datetime_format": datetime_format
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=file
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=file
     )

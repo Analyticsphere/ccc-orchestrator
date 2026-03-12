@@ -56,8 +56,8 @@ def create_missing_omop_tables(project_id: str, dataset_id: str, omop_version: s
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
 def generate_derived_table_from_harmonized(site: str, bucket: str, delivery_date: str, table_name: str, vocab_version: str) -> None:
@@ -76,9 +76,9 @@ def generate_derived_table_from_harmonized(site: str, bucket: str, delivery_date
             "table_name": table_name,
             "vocab_version": vocab_version
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=table_name
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=table_name
     )
 
 def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project_id: str, dataset_id: str, site: str = None) -> None:
@@ -96,8 +96,8 @@ def load_derived_tables_to_bigquery(gcs_bucket: str, delivery_date: str, project
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
 def populate_cdm_source_file(cdm_source_data: dict) -> None:
@@ -119,9 +119,9 @@ def populate_cdm_source_file(cdm_source_data: dict) -> None:
         url=constants.OMOP_PROCESSOR_ENDPOINT,
         endpoint="populate_cdm_source_file",
         json_data=cdm_source_data,
-        site=site,
-        delivery_date=delivery_date,
-        file='cdm_source'
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file='cdm_source'
     )
 
 def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str, site: str = None, delivery_date: str = None, file: str = None) -> None:
@@ -138,7 +138,7 @@ def upgrade_cdm(file_path: str, cdm_version: str, target_cdm_version: str, site:
             "omop_version": cdm_version,
             "target_omop_version": target_cdm_version
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=file
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=file
     )

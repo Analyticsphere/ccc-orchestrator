@@ -32,9 +32,9 @@ def load_vocabulary_table_gcs_to_bq(
             "project_id": project_id,
             "dataset_id": dataset_id,
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=table_file_name
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=table_file_name
     )
 
 
@@ -90,9 +90,9 @@ def harmonize_vocab_step(
             "step": step
         },
         timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC),
-        site=site,
-        delivery_date=delivery_date,
-        file=file_name
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=file_name
     )
 
 def should_harmonize_table(table_name):
@@ -145,8 +145,8 @@ def discover_tables_for_dedup(
             "step": constants.DISCOVER_TABLES_FOR_DEDUP
         },
         timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC),
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
     # Extract table configs from the response (response is already parsed JSON)
@@ -198,7 +198,7 @@ def deduplicate_single_table(table_config: dict) -> None:
             "step": constants.DEDUPLICATE_SINGLE_TABLE
         },
         timeout=(constants.DEFAULT_CONNECTION_TIMEOUT_SEC, constants.VOCAB_TIMEOUT_SEC),
-        site=site,
-        delivery_date=delivery_date,
-        file=table_name
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=table_name
     )
