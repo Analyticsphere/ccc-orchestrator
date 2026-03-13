@@ -142,7 +142,7 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
 @log_task_execution()
 def retrieve_connect_data(site_to_process: tuple[str, str]) -> None:
     """
-    Export required Connect study data once per site delivery before file conversion begins.
+    Export required Connect study data once per site delivery.
     """
     site, delivery_date = site_to_process
     config = SiteConfig(site=site)
@@ -975,10 +975,10 @@ with dag:
 
     # Set task dependencies
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> connect_data >> process_files >> validate_files >> fix_data_file >> upgrade_file
+    file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
 
-    # Populate cdm_source file after upgrade, before vocab harmonization
-    upgrade_file >> populate_cdm_source_files >> vocab_harmonization_group
+    # Export Connect data after upgrade, then populate cdm_source before vocab harmonization
+    upgrade_file >> connect_data >> populate_cdm_source_files >> vocab_harmonization_group
 
     # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
     vocab_harmonization_group >> generate_derived_tables_group
