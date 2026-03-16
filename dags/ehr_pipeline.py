@@ -256,6 +256,7 @@ def filter_participants(file_config_dict: dict) -> None:
 
     participant_filter.filter_connect_participants(
         file_path=fc.file_path,
+        omop_version=constants.OMOP_TARGET_CDM_VERSION,
         site=fc.site,
         delivery_date=fc.delivery_date,
         file=fc.table_name

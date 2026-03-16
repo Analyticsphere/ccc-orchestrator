@@ -39,6 +39,7 @@ def get_connect_data(
 
 def filter_connect_participants(
     file_path: str,
+    omop_version: str,
     site: str = None,
     delivery_date: str = None,
     file: str = None
@@ -65,6 +66,7 @@ def filter_connect_participants(
         endpoint="filter_connect_participants",
         json_data={
             "file_path": file_path,
+            "omop_version": omop_version,
         },
         log_site=site,
         log_delivery_date=delivery_date,
