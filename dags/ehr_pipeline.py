@@ -6,6 +6,7 @@ import dependencies.ehr.bq as bq
 import dependencies.ehr.constants as constants
 import dependencies.ehr.file_config as file_config
 import dependencies.ehr.omop as omop
+import dependencies.ehr.participant_filter as participant_filter
 import dependencies.ehr.processing as processing
 import dependencies.ehr.processing_jobs as processing_jobs
 import dependencies.ehr.utils as utils
@@ -138,6 +139,24 @@ def get_unprocessed_files(sites_to_process: list[tuple[str, str]]) -> list[dict]
     return file_configs
 
 
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
+@log_task_execution()
+def retrieve_connect_data(site_to_process: tuple[str, str]) -> None:
+    """
+    Export required Connect study data once per site delivery.
+    """
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+
+    participant_filter.get_connect_data(
+        project_id=config.project_id,
+        delivery_bucket=f"{config.gcs_bucket}/{delivery_date}",
+        site_connect_id=config.site_connect_id,
+        site=site,
+        delivery_date=delivery_date
+    )
+
+
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
 @log_task_execution()
 def convert_file(file_config_dict: dict) -> None:
@@ -220,6 +239,28 @@ def cdm_upgrade(file_config_dict: dict) -> None:
             delivery_date=fc.delivery_date,
             file=fc.table_name
         )
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(hours=1))
+@log_task_execution()
+def filter_participants(file_config_dict: dict) -> None:
+    """
+    Apply Connect participant-status exclusions to a single file.
+
+    This task runs once per file after site-level Connect data export completes
+    and after any file-level CDM upgrade has finished. The processor service
+    handles tables without a person_id column by returning a success response
+    with a skip message, which keeps this DAG step straightforward.
+    """
+    fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
+
+    participant_filter.filter_connect_participants(
+        file_path=fc.file_path,
+        omop_version=constants.OMOP_TARGET_CDM_VERSION,
+        site=fc.site,
+        delivery_date=fc.delivery_date,
+        file=fc.table_name
+    )
 
 
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=10))
@@ -865,12 +906,14 @@ with dag:
     unprocessed_sites = id_sites_to_process()
     sites_exist = end_if_all_processed(unprocessed_sites)
     file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
+    connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
     
     # Expand the processing tasks across the list of file configurations.
     process_files = convert_file.expand(file_config_dict=file_list)
     validate_files = validate_file.expand(file_config_dict=file_list)
     fix_data_file = normalize_file.expand(file_config_dict=file_list)
     upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
+    filter_file = filter_participants.expand(file_config_dict=file_list)
 
     # Vocab harmonization task group with 8 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
@@ -958,8 +1001,12 @@ with dag:
     api_health_check >> unprocessed_sites >> sites_exist >> file_list
     file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
 
-    # Populate cdm_source file after upgrade, before vocab harmonization
-    upgrade_file >> populate_cdm_source_files >> vocab_harmonization_group
+    # Order of operations:
+    # 1. Upgrade each file to the target CDM version when needed.
+    # 2. Export site-level Connect reference data once per delivery.
+    # 3. Filter each file using the exported Connect participant data.
+    # 4. Populate cdm_source after file-level filtering completes.
+    upgrade_file >> connect_data >> filter_file >> populate_cdm_source_files >> vocab_harmonization_group
 
     # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
     vocab_harmonization_group >> generate_derived_tables_group

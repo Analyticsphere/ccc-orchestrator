@@ -1,50 +1,51 @@
-# OMOP/EHR Data Pipeline
+# EHR Pipeline
 
-An Apache Airflow pipeline for processing Electronic Health Record (EHR) data conforming to the OMOP Common Data Model (CDM). This pipeline automates ingestion, validation, CDM upgrade, vocabulary harmonization, and loading into BigQuery.
-
-## Overview
-
-Designed for Google Cloud Composer (managed Airflow), the DAG orchestrates the following:
-
-1. Discovers the latest date-based deliveries in per-site GCS buckets
-2. Converts incoming CSV/CSV.GZ files to optimized Parquet
-3. Validates files against OMOP CDM schema
-4. Normalizes data types/formats
-5. Upgrades CDM versions if needed (e.g., 5.3 → 5.4)
-6. Harmonizes vocabularies across clinical tables (multi-step)
-7. Loads harmonized and remaining tables to BigQuery
-8. Generates derived data tables and a delivery report; completes CDM metadata
-9. Executes OHDSI DataQualityDashboard (DQD) checks via Cloud Run Job
-10. Executes OHDSI Achilles analyses via Cloud Run Job
-11. Creates Atlas results tables for OHDSI tools integration
+Airflow DAG for processing OMOP EHR deliveries in Cloud Composer.
 
 The DAG id is `ehr-pipeline`.
 
-## Prerequisites
+## Purpose
 
-- Google Cloud Platform with:
-  - Cloud Composer environment
-  - BigQuery access
-  - Cloud Storage buckets per site, with deliveries organized as YYYY-MM-DD top-level folders
-- OMOP processor API endpoint accessible from Composer
-- **OMOP analyzer service** (`ccc-omop-analyzer`) deployed with Cloud Run Jobs for DQD and Achilles
-- OMOP vocabulary files available in GCS (see Environment Variables)
-- Site configuration YAML uploaded with the DAGs (see Configuration)
+For each site delivery, the pipeline:
 
-Permissions/auth:
-- Composer worker service account must be able to:
-  - Obtain an identity token via gcloud and invoke the Processor API
-  - Invoke the Analyzer API and execute Cloud Run Jobs (DQD, Achilles)
-  - Read from site GCS buckets and write artifacts
-  - Create/read/write BigQuery datasets/tables
+1. Finds the most recent delivery folder in the site's GCS bucket.
+2. Exports Connect reference data for the site.
+3. Converts source files to Parquet.
+4. Validates and normalizes OMOP files.
+5. Upgrades delivered CDM versions when required.
+6. Filters participants using Connect status data.
+7. Runs vocabulary harmonization for supported clinical tables.
+8. Generates derived tables.
+9. Loads the processed data to BigQuery.
+10. Runs DQD, Achilles, PASS, and delivery reporting.
 
-Note: Authentication uses an identity token from `gcloud auth print-identity-token`, which is available in Composer images. Ensure the API accepts Google-signed identity tokens (typical for Cloud Run with authenticated invokers).
+## Runtime Model
+
+This repository contains the Composer DAG and task helpers. The heavy processing is executed by external services:
+
+- `OMOP_PROCESSOR_ENDPOINT` handles file conversion, validation, normalization, CDM upgrades, vocabulary work, BigQuery preparation, and related OMOP operations.
+- `OMOP_ANALYZER_ENDPOINT` handles DQD, Achilles, Atlas table creation, and report generation.
+
+The DAG coordinates site discovery, task ordering, retries, and pipeline logging.
+
+## Requirements
+
+- Google Cloud Composer
+- BigQuery datasets for CDM and analytics results
+- Per-site GCS buckets with deliveries stored as top-level `YYYY-MM-DD` folders
+- Reachable processor and analyzer services
+- Composer worker permissions to:
+  - read and write the configured GCS buckets
+  - invoke the processor and analyzer services
+  - create, truncate, and load BigQuery tables
 
 ## Configuration
 
-### Site Configuration
+### Site Config
 
-Sites are configured in `dags/dependencies/ehr/config/site_config.yml`, stored in GCS.
+The DAG reads site configuration from:
+
+`/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml`
 
 Example:
 
@@ -52,151 +53,119 @@ Example:
 site:
   site_name:
     display_name: "Site Display Name"
-    gcs_bucket: "my-site-bucket"           # bucket name only (no gs://)
-    file_delivery_format: ".csv"           # or .csv.gz
+    gcs_bucket: "my-site-bucket"
+    file_delivery_format: ".csv"
     project_id: "gcp-project-id"
-    bq_dataset: "bigquery_dataset"         # CDM dataset ID
-    atlas_results_dataset: "atlas_results" # Atlas results dataset ID (optional, defaults to bq_dataset)
-    omop_version: "5.3"                    # delivered CDM version
-    date_format: "%Y-%m-%d"                # date format used by site
-    datetime_format: "%Y-%m-%d %H:%M:%S"   # datetime format used by site
-    overwrite_site_vocab_with_standard: true # default true; if false, site vocab overwrites standard
+    cdm_bq_dataset: "omop_cdm"
+    analytics_bq_dataset: "omop_analytics"
+    omop_version: "5.3"
+    date_format: "%Y-%m-%d"
+    datetime_format: "%Y-%m-%d %H:%M:%S"
+    overwrite_site_vocab_with_standard: true
+    site_connect_id: 123456789
 ```
+
+Fields used by the DAG:
+
+- `display_name`: human-readable site name used in logs and reports
+- `gcs_bucket`: bucket name only, without `gs://`
+- `file_delivery_format`: expected source file format, typically `.csv` or `.csv.gz`
+- `project_id`: GCP project for BigQuery operations
+- `cdm_bq_dataset`: target OMOP dataset
+- `analytics_bq_dataset`: target analytics dataset for DQD, Achilles, PASS, and Atlas outputs
+- `omop_version`: delivered CDM version
+- `date_format` and `datetime_format`: source formatting hints for normalization
+- `overwrite_site_vocab_with_standard`: when `true`, standard vocabulary is loaded and site vocab tables are skipped
+- `site_connect_id`: Connect identifier used for site-level participant export
 
 ### Environment Variables
 
-Set as environment variables in Composer. Defaults shown are from `constants.py` but should be customized for your environment:
+Defined in [dags/dependencies/ehr/constants.py](/Users/frankenbergerea/Development/ccc-orchestrator/dags/dependencies/ehr/constants.py):
 
-- OMOP_PROCESSOR_ENDPOINT: Required. Base URL for the Processor API (e.g., https://<cloud-run-service-url>)
-- OMOP_ANALYZER_ENDPOINT: Required. Base URL for the Analyzer API (e.g., https://<ccc-omop-analyzer-url>) - used for DQD, Achilles, and Atlas results table creation
-- OMOP_TARGET_VOCAB_VERSION: Required. Target vocabulary version string (e.g., "v5.0 27-AUG-25")
-- OMOP_TARGET_CDM_VERSION: Required. Target OMOP CDM version (e.g., "5.4")
-- OMOP_VOCAB_GCS_PATH: Required. GCS path to vocab distribution (e.g., gs://<bucket>/vocab/<version>)
+- `OMOP_PROCESSOR_ENDPOINT`
+- `OMOP_ANALYZER_ENDPOINT`
+- `OMOP_TARGET_VOCAB_VERSION`
+- `OMOP_TARGET_CDM_VERSION`
+- `OMOP_VOCAB_GCS_PATH`
+- `CONNECT_DATASET_ID`
 
-The site config file path is fixed in code to `/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml`.
+## DAG Flow
 
-## Pipeline Tasks
+The main flow in [dags/ehr_pipeline.py](/Users/frankenbergerea/Development/ccc-orchestrator/dags/ehr_pipeline.py) is:
 
-Main tasks and groups in `ehr_pipeline.py`:
+1. `check_api_health`
+2. `id_sites_to_process`
+3. `get_unprocessed_files`
+4. Per-site `retrieve_connect_data`
+5. Per-file `convert_file`, `validate_file`, `normalize_file`, `cdm_upgrade`, `filter_participants`
+6. Per-site `populate_cdm_source_file`
+7. `vocab_harmonization` task group
+8. `generate_derived_tables` task group
+9. `load_to_bigquery` task group
+10. `cleanup`
+11. Per-site `generate_report_csv`
+12. Per-site `dqd`, `achilles`, `pass_analysis`
+13. Per-site `atlas_results_tables` and `generate_delivery_report`
+14. `mark_delivery_complete`
+15. `log_done`
 
-- check_api_health: Verify Processor API availability
-- id_sites_to_process: Identify sites with unprocessed/errored deliveries and generate optimized vocab if needed
-- end_if_all_processed: Short-circuit when no sites to process
-- get_unprocessed_files: Build list of files to process and log pipeline start per site
-- convert_file: Convert CSV/CSV.GZ to Parquet
-- validate_file: Validate against OMOP CDM schema
-- normalize_file: Standardize data types and formats
-- cdm_upgrade: Upgrade delivered CDM version to target (e.g., 5.3 → 5.4)
+### Vocabulary Harmonization
 
-Vocabulary harmonization (TaskGroup: vocab_harmonization):
-1. harmonize_vocab_source_target: Map source concepts to updated target codes
-2. harmonize_vocab_target_remap: Remap non-standard targets to new standard targets
-3. harmonize_vocab_target_replacement: Replace non-standard targets with new standard targets
-4. harmonize_vocab_domain_check: Check and update domains as needed
-5. harmonize_vocab_omop_etl: OMOP→OMOP ETL per table
-6. harmonize_vocab_consolidate: Consolidate ETL outputs per site
-7. harmonize_vocab_discover_tables: Discover all tables needing deduplication (per site, returns list)
-8. harmonize_vocab_deduplicate_table: Deduplicate primary keys for a single table (parallel execution per table)
+The `vocab_harmonization` task group runs these steps in order:
 
-Load to BigQuery (TaskGroup: load_to_bigquery):
-- prepare_bq: Clear prior tables in dataset
-- load_harmonized_tables: Load harmonized ETL outputs
-- load_target_vocab: Load standard vocab tables (skipped if site overrides)
-- load_remaining: Load remaining OMOP tables from Parquet
+1. `harmonize_vocab_source_target`
+2. `harmonize_vocab_target_remap`
+3. `harmonize_vocab_target_replacement`
+4. `harmonize_vocab_domain_check`
+5. `harmonize_vocab_omop_etl`
+6. `harmonize_vocab_consolidate`
+7. `harmonize_vocab_discover_tables`
+8. `flatten_table_configs`
+9. `harmonize_vocab_deduplicate_table`
 
-Post-load:
-- derived_data_tables: Populate observation_period, condition_era, drug_era
-- cleanup: Generate delivery report, create any missing OMOP tables, populate cdm_source, and mark complete
+Only tables listed in `VOCAB_HARMONIZED_TABLES` are processed by these steps.
 
-OHDSI Data Quality and Characterization:
-- dqd: Execute DataQualityDashboard checks via Cloud Run Job (`ccc-omop-analyzer-dqd-job`)
-  - Runs comprehensive data quality checks on the loaded CDM dataset
-  - Outputs results to GCS and BigQuery (JSON, CSV formats)
-  - Execution time: 2+ hours (runs in Cloud Run Job to avoid timeout limits)
-- achilles: Execute Achilles analyses via Cloud Run Job (`ccc-omop-analyzer-achilles-job`)
-  - Generates database characterization and descriptive statistics
-  - Outputs results to GCS and BigQuery (CSV, JSON/ARES formats)
-  - Executes post-Achilles SQL script for concept counts
-  - Execution time: 2+ hours (runs in Cloud Run Job to avoid timeout limits)
-- atlas_results_tables: Create Atlas results tables via Analyzer API
-  - Creates necessary BigQuery tables for storing OHDSI Atlas/Achilles results
-  - Calls `/create_atlas_results_tables` endpoint on the Analyzer service
+### Derived Tables
 
-Final:
-- log_done: Final guard that marks the DAG failed if any prior tasks failed (and logs a DAG failure entry)
+Derived tables are generated after vocabulary harmonization and before BigQuery loading.
 
-## Error Handling and Logging
+The current derived tables are defined by `DERIVED_DATA_TABLES` in [dags/dependencies/ehr/constants.py](/Users/frankenbergerea/Development/ccc-orchestrator/dags/dependencies/ehr/constants.py).
 
-- Automatic retries with exponential backoff for transient failures
-- Centralized API error handling with contextual messages
-- Pipeline phase logging via Processor API endpoints (`pipeline_log`, `get_log_row`)
-- Airflow task logs and stdout (captured by Cloud Logging)
-- `log_done` inspects task states and fails the run if any task failed
+## Deployment
 
-Note: The logging BigQuery dataset/table is managed by the Processor API; this DAG does not configure the table name directly.
+1. Upload `dags/` to the Composer DAGs bucket, preserving paths.
+2. Ensure `site_config.yml` is present at the configured path in the DAGs bucket.
+3. Set the required environment variables in Composer.
+4. Grant Composer access to the configured GCS buckets, BigQuery datasets, and service endpoints.
+5. Trigger `ehr-pipeline` from Airflow.
 
-## File Structure
+## Operational Notes
 
-```
+- A site is processed when its latest delivery has no log row or its most recent log row is in an error state.
+- `load_harmonized_tables` skips cleanly when no harmonized clinical tables were produced.
+- `load_remaining` skips vocabulary tables already handled elsewhere and skips `cdm_source`, which is loaded during `cleanup`.
+- `log_done` inspects task states and fails the DAG if any upstream task failed, even if a mapped task failure was otherwise easy to miss.
+
+## Repository Layout
+
+```text
 dags/
-├── ehr_pipeline.py                 # Main DAG
-└── dependencies/
-    └── ehr/
-        ├── analysis.py            # OHDSI tool execution (DQD, Achilles) via Cloud Run Jobs
-        ├── bq.py                  # BigQuery operations and pipeline logging calls
-        ├── constants.py           # Env vars, enums, constants
-        ├── file_config.py         # Per-file config builder
-        ├── omop.py                # OMOP-specific API calls (upgrade, reports, CDM tables)
-        ├── processing.py          # File discovery, conversion, normalization
-        ├── utils.py               # Logging, auth, site config, helpers
-        ├── validation.py          # Schema validation, delivery report
-        ├── vocab.py               # Vocabulary loading and harmonization steps
-        └── config/
-            └── site_config.yml    # Site configuration (checked into Composer DAGs bucket)
+  ehr_pipeline.py
+  dependencies/
+    ehr/
+      analysis.py
+      bq.py
+      constants.py
+      dag_helpers.py
+      file_config.py
+      omop.py
+      participant_filter.py
+      processing.py
+      processing_jobs.py
+      storage_backend.py
+      utils.py
+      validation.py
+      vocab.py
+      config/
+        site_config.yml
 ```
-
-## Deployment (Cloud Composer)
-
-### Prerequisites
-- Deploy the `ccc-omop-analyzer` service first (see [ccc-omop-analyzer README](../ccc-omop-analyzer/README.md))
-  - This creates the Cloud Run service and Cloud Run Jobs for DQD and Achilles
-
-### Deployment Steps
-1. Upload this repository's `dags/` folder (preserving subpaths) to your Composer environment's DAGs bucket.
-2. Create Composer environment variables for the values listed above (OMOP_... variables).
-3. Place `site_config.yml` at `dags/dependencies/ehr/config/site_config.yml` in the DAGs bucket.
-4. Grant Composer's service account permissions to:
-   - Invoke the Processor API (Cloud Run Invoker or equivalent)
-   - Invoke the Analyzer API and execute Cloud Run Jobs
-   - Read/write the site GCS buckets and artifacts
-   - Read/write the target BigQuery datasets
-5. In Airflow UI, trigger the `ehr-pipeline` DAG.
-
-Optional quick checks:
-- Ensure each site bucket has a top-level folder named like `YYYY-MM-DD` containing OMOP CSV/CSV.GZ files.
-- Verify the Processor API heartbeat at `GET {OMOP_PROCESSOR_ENDPOINT}/heartbeat` returns `{ status: "healthy" }` for the Composer service account.
-- Verify the Analyzer API heartbeat at `GET {OMOP_ANALYZER_ENDPOINT}/heartbeat` returns `{ status: "success" }` for the Composer service account.
-
-## Notes and Tips
-
-- Harmonization applies only to clinical tables listed in `constants.VOCAB_HARMONIZED_TABLES`.
-- If `overwrite_site_vocab_with_standard` is false, the site-provided vocab tables will overwrite standard vocab tables loaded by the pipeline.
-- GCS bucket names in config should not include `gs://`; the pipeline will add URI prefixes where needed.
-- The target vocabulary files should be present in the GCS bucket specified in `OMOP_VOCAB_GCS_PATH` and in a folder with the version specified in `OMOP_TARGET_VOCAB_VERSION`.
-- **OHDSI Tasks**: DQD and Achilles tasks run in parallel after the cleanup task completes. Both can take 2+ hours and execute as Cloud Run Jobs to avoid Airflow task timeout limits.
-- **Atlas Results Tables**: The `atlas_results_tables` task creates necessary BigQuery tables for OHDSI Atlas integration. It runs after both DQD and Achilles complete.
-- **Artifact Storage**: DQD and Achilles results are stored in GCS under `{gcs_bucket}/{delivery_date}/dqd/` and `{gcs_bucket}/{delivery_date}/achilles/` respectively, and also loaded into BigQuery tables.
-
-## Development
-
-### Adding New Sites
-
-1. Add the site under `site_config.yml` using the schema above.
-2. Grant Composer read/write access to the site’s GCS bucket.
-3. Create the target BigQuery dataset (or permissions to create it).
-4. Test with a small delivery under `gs://<bucket>/YYYY-MM-DD/`.
-
-### Extending the Pipeline
-
-- To add new derived tables, update `constants.DERIVED_DATA_TABLES` and extend `omop.create_derived_data_table` handling in the Processor API.
-- To adjust harmonization, modify steps in `vocab.py` or the sequence in the `vocab_harmonization` TaskGroup.

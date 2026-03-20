@@ -7,6 +7,7 @@ OMOP_ANALYZER_ENDPOINT = os.getenv('OMOP_ANALYZER_ENDPOINT', 'NO OMOP_ANALYZER_E
 OMOP_TARGET_VOCAB_VERSION = os.getenv('OMOP_TARGET_VOCAB_VERSION', 'v5.0 27-AUG-25')
 OMOP_TARGET_CDM_VERSION = os.getenv('OMOP_TARGET_CDM_VERSION', '5.4')
 OMOP_VOCAB_GCS_PATH = os.getenv('OMOP_VOCAB_GCS_PATH', 'NO OMOP_VOCAB_GCS_PATH DEFINED')
+CONNECT_DATASET_ID = os.getenv('CONNECT_DATASET_ID', 'NO CONNECT_DATASET_ID DEFINED')
 
 SITE_CONFIG_YML_PATH = "/home/airflow/gcs/dags/dependencies/ehr/config/site_config.yml"
 
@@ -80,6 +81,7 @@ class FileConfig(str, Enum):
     DATE_FORMAT = "date_format"
     DATETIME_FORMAT = "datetime_format"
     OVERWRITE_SITE_VOCAB_WITH_STANDARD = "overwrite_site_vocab_with_standard"
+    SITE_CONNECT_ID = "site_connect_id"
 
 class ArtifactPaths(str, Enum):
     ARTIFACTS = "artifacts/"

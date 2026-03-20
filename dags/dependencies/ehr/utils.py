@@ -254,12 +254,15 @@ def make_api_call(
                  params: Optional[Dict[str, str]] = None,
                  json_data: Optional[Dict[str, Any]] = None,
                  timeout: Optional[Union[float, Tuple[float, float]]] = None,
-                 site: Optional[str] = None,
-                 delivery_date: Optional[str] = None,
-                 file: Optional[str] = None
+                 log_site: Optional[str] = None,
+                 log_delivery_date: Optional[str] = None,
+                 log_file: Optional[str] = None
                  ) -> Optional[Any]:
     """
     Makes an API call to the processor endpoint with standardized error handling.
+
+    Only `params` and `json_data` are sent to the remote endpoint. The `log_*`
+    arguments are used exclusively to add searchable context to local logs.
 
     Args:
         url: Base URL of the API
@@ -268,15 +271,19 @@ def make_api_call(
         params: Query parameters for GET requests
         json_data: JSON body for POST requests
         timeout: Request timeout
-        site: Optional site name for logging context
-        delivery_date: Optional delivery date for logging context
-        file: Optional file/table name for logging context
+        log_site: Optional site name used only for logging context
+        log_delivery_date: Optional delivery date used only for logging context
+        log_file: Optional file/table name used only for logging context
     """
     # Import here to avoid circular dependency
     
 
     api_call_url = f"{url}/{endpoint}"
-    log_ctx = format_log_context(site=site, delivery_date=delivery_date, file=file)
+    log_ctx = format_log_context(
+        site=log_site,
+        delivery_date=log_delivery_date,
+        file=log_file
+    )
 
     # pipeline_log calls are made often and clutter the logs, don't display this message
     if endpoint != "pipeline_log":

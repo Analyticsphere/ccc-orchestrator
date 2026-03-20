@@ -24,9 +24,9 @@ def load_individual_parquet_to_bq(
             "table_name": table_name,
             "write_type": write_type
         },
-        site=site,
-        delivery_date=delivery_date,
-        file=table_name
+        log_site=site,
+        log_delivery_date=delivery_date,
+        log_file=table_name
     )
 
 def load_harmonized_tables_to_bq(gcs_bucket: str, delivery_date: str, project_id: str, dataset_id: str, site: str = None) -> None:
@@ -44,8 +44,8 @@ def load_harmonized_tables_to_bq(gcs_bucket: str, delivery_date: str, project_id
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
 def prep_dataset(project_id: str, dataset_id: str, site: str = None, delivery_date: str = None) -> None:
@@ -61,8 +61,8 @@ def prep_dataset(project_id: str, dataset_id: str, site: str = None, delivery_da
             "project_id": project_id,
             "dataset_id": dataset_id
         },
-        site=site,
-        delivery_date=delivery_date
+        log_site=site,
+        log_delivery_date=delivery_date
     )
 
 def get_bq_log_row(site: str, delivery_date: str) -> list:
@@ -88,8 +88,8 @@ def get_bq_log_row(site: str, delivery_date: str) -> list:
                 "site": site,
                 "delivery_date": delivery_date,
             },
-            site=site,
-            delivery_date=delivery_date
+            log_site=site,
+            log_delivery_date=delivery_date
         )
 
         if response and 'log_row' in response:
