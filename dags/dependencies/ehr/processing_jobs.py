@@ -397,7 +397,8 @@ def run_generate_report_csv_job(
     target_vocabulary_version: str,
     target_cdm_version: str,
     project_id: str,
-    context
+    context,
+    artifact_type: str | None = None
 ) -> None:
     """
     Execute delivery report CSV generation as a Cloud Run Job.
@@ -417,10 +418,27 @@ def run_generate_report_csv_job(
         target_cdm_version: Target OMOP CDM version
         project_id: GCP project ID
         context: Airflow task context
+        artifact_type: Optional artifact type to generate. When set, only that
+                       artifact type (or consolidation) is executed. When None,
+                       all artifacts are generated serially (legacy behavior).
     """
     
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
     utils.logger.info(f"{log_ctx}Executing generate_report_csv Cloud Run Job")
+
+    env_vars = [
+        {'name': 'SITE', 'value': site},
+        {'name': 'GCS_BUCKET', 'value': gcs_bucket},
+        {'name': 'DELIVERY_DATE', 'value': delivery_date},
+        {'name': 'SITE_DISPLAY_NAME', 'value': site_display_name},
+        {'name': 'FILE_DELIVERY_FORMAT', 'value': file_delivery_format},
+        {'name': 'DELIVERED_CDM_VERSION', 'value': delivered_cdm_version},
+        {'name': 'TARGET_VOCABULARY_VERSION', 'value': target_vocabulary_version},
+        {'name': 'TARGET_CDM_VERSION', 'value': target_cdm_version}
+    ]
+
+    if artifact_type is not None:
+        env_vars.append({'name': 'ARTIFACT_TYPE', 'value': artifact_type})
 
     operator = CloudRunExecuteJobOperator(
         task_id=f'generate_report_csv_job',
@@ -429,16 +447,7 @@ def run_generate_report_csv_job(
         job_name='ccc-omop-file-processor-generate-report-csv-job',
         overrides={
             'container_overrides': [{
-                'env': [
-                    {'name': 'SITE', 'value': site},
-                    {'name': 'GCS_BUCKET', 'value': gcs_bucket},
-                    {'name': 'DELIVERY_DATE', 'value': delivery_date},
-                    {'name': 'SITE_DISPLAY_NAME', 'value': site_display_name},
-                    {'name': 'FILE_DELIVERY_FORMAT', 'value': file_delivery_format},
-                    {'name': 'DELIVERED_CDM_VERSION', 'value': delivered_cdm_version},
-                    {'name': 'TARGET_VOCABULARY_VERSION', 'value': target_vocabulary_version},
-                    {'name': 'TARGET_CDM_VERSION', 'value': target_cdm_version}
-                ]
+                'env': env_vars
             }]
         },
         deferrable=False
