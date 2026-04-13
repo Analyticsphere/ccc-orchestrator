@@ -956,15 +956,23 @@ with dag:
     api_health_check = check_api_health()
     unprocessed_sites = id_sites_to_process()
     sites_exist = end_if_all_processed(unprocessed_sites)
-    file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
-    connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
-    
-    # Expand the processing tasks across the list of file configurations.
-    process_files = convert_file.expand(file_config_dict=file_list)
-    validate_files = validate_file.expand(file_config_dict=file_list)
-    fix_data_file = normalize_file.expand(file_config_dict=file_list)
-    upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
-    filter_file = filter_participants.expand(file_config_dict=file_list)
+    # Process delivery task group: file conversion through CDM upgrade and source population
+    with TaskGroup(group_id="process_delivery", tooltip="Process incoming delivery files through CDM upgrade and source population") as process_delivery_group:
+        file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
+        process_files = convert_file.expand(file_config_dict=file_list)
+        validate_files = validate_file.expand(file_config_dict=file_list)
+        fix_data_file = normalize_file.expand(file_config_dict=file_list)
+        upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
+        populate_cdm_source_files = populate_cdm_source_file.expand(site_to_process=unprocessed_sites)
+
+        file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> populate_cdm_source_files
+
+    # Filtering task group: retrieve Connect data, then filter participants
+    with TaskGroup(group_id="filtering", tooltip="Filter participants using Connect reference data") as filtering_group:
+        connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
+        filter_file = filter_participants.expand(file_config_dict=file_list)
+
+        connect_data >> filter_file
 
     # Vocab harmonization task group with 8 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
@@ -1046,19 +1054,8 @@ with dag:
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
 
-    # Expand the new populate_cdm_source_file task
-    populate_cdm_source_files = populate_cdm_source_file.expand(site_to_process=unprocessed_sites)
-
     # Set task dependencies
-    api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
-
-    # Order of operations:
-    # 1. Upgrade each file to the target CDM version when needed.
-    # 2. Export site-level Connect reference data once per delivery.
-    # 3. Filter each file using the exported Connect participant data.
-    # 4. Populate cdm_source after file-level filtering completes.
-    upgrade_file >> connect_data >> filter_file >> populate_cdm_source_files >> vocab_harmonization_group
+    api_health_check >> unprocessed_sites >> sites_exist >> process_delivery_group >> filtering_group >> vocab_harmonization_group
 
     # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
     vocab_harmonization_group >> generate_derived_tables_group
