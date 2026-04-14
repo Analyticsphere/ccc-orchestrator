@@ -699,22 +699,43 @@ def cleanup(sites_to_process: list[tuple[str, str]]) -> None:
             raise Exception(f"{log_ctx}Unable to perform CDM cleanup: {e}") from e
 
 
+@task(trigger_rule="none_failed", execution_timeout=timedelta(minutes=5))
+def create_report_artifact_configs(sites_to_process: list[tuple[str, str]]) -> list[dict]:
+    """
+    Create a configuration dictionary for each site-artifact_type combination.
+
+    For example, if we have 2 sites and 8 artifact types, this will create 16 configs
+    (one for each combination), allowing parallel generation of each artifact.
+    """
+    configs = []
+    for site, delivery_date in sites_to_process:
+        for artifact_type in constants.REPORT_ARTIFACT_TYPES:
+            configs.append({
+                'site': site,
+                'delivery_date': delivery_date,
+                'artifact_type': artifact_type
+            })
+    return configs
+
+
 @task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=60))
 @log_task_execution()
-def generate_report_csv(site_to_process: tuple[str, str]) -> None:
+def generate_report_artifact(report_artifact_config: dict) -> None:
     """
-    Generate delivery report CSV file with processing metadata and statistics.
+    Generate a single report artifact type for a site delivery.
 
-    This CSV file serves as the data source for visual reporting and dashboards.
-    The report includes metadata, row counts, vocabulary breakdowns, and type concept distributions.
+    This task is expanded per site-artifact_type combination, allowing parallel
+    processing. For example: 2 sites × 8 artifact types = 16 parallel tasks.
     """
-    site, delivery_date = site_to_process
+    site = report_artifact_config['site']
+    delivery_date = report_artifact_config['delivery_date']
+    artifact_type = report_artifact_config['artifact_type']
+
     config = SiteConfig(site=site)
     log_ctx = format_log_context(site=site, delivery_date=delivery_date)
 
-    utils.logger.info(f"{log_ctx}Generating delivery report CSV")
+    utils.logger.info(f"{log_ctx}Generating report artifact: {artifact_type}")
 
-    # Execute report generation
     processing_jobs.run_generate_report_csv_job(
         site=site,
         gcs_bucket=config.gcs_bucket,
@@ -725,7 +746,37 @@ def generate_report_csv(site_to_process: tuple[str, str]) -> None:
         target_vocabulary_version=constants.OMOP_TARGET_VOCAB_VERSION,
         target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
         project_id=config.project_id,
-        context=TaskContext.get_context()
+        context=TaskContext.get_context(),
+        artifact_type=artifact_type
+    )
+
+
+@task(max_active_tis_per_dag=10, trigger_rule="none_failed", execution_timeout=timedelta(minutes=15))
+@log_task_execution()
+def consolidate_report(site_to_process: tuple[str, str]) -> None:
+    """
+    Consolidate all report artifact files into the final delivery report CSV.
+
+    Runs after all parallel report artifact tasks complete for all sites.
+    """
+    site, delivery_date = site_to_process
+    config = SiteConfig(site=site)
+    log_ctx = format_log_context(site=site, delivery_date=delivery_date)
+
+    utils.logger.info(f"{log_ctx}Consolidating report artifacts into final CSV")
+
+    processing_jobs.run_generate_report_csv_job(
+        site=site,
+        gcs_bucket=config.gcs_bucket,
+        delivery_date=delivery_date,
+        site_display_name=config.display_name,
+        file_delivery_format=config.file_delivery_format,
+        delivered_cdm_version=config.omop_version,
+        target_vocabulary_version=constants.OMOP_TARGET_VOCAB_VERSION,
+        target_cdm_version=constants.OMOP_TARGET_CDM_VERSION,
+        project_id=config.project_id,
+        context=TaskContext.get_context(),
+        artifact_type=constants.REPORT_ARTIFACT_CONSOLIDATE
     )
 
 
@@ -905,15 +956,23 @@ with dag:
     api_health_check = check_api_health()
     unprocessed_sites = id_sites_to_process()
     sites_exist = end_if_all_processed(unprocessed_sites)
-    file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
-    connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
-    
-    # Expand the processing tasks across the list of file configurations.
-    process_files = convert_file.expand(file_config_dict=file_list)
-    validate_files = validate_file.expand(file_config_dict=file_list)
-    fix_data_file = normalize_file.expand(file_config_dict=file_list)
-    upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
-    filter_file = filter_participants.expand(file_config_dict=file_list)
+    # Process delivery task group: file conversion through CDM upgrade and source population
+    with TaskGroup(group_id="process_delivery", tooltip="Process incoming delivery files through CDM upgrade and source population") as process_delivery_group:
+        file_list = get_unprocessed_files(sites_to_process=unprocessed_sites)
+        process_files = convert_file.expand(file_config_dict=file_list)
+        validate_files = validate_file.expand(file_config_dict=file_list)
+        fix_data_file = normalize_file.expand(file_config_dict=file_list)
+        upgrade_file = cdm_upgrade.expand(file_config_dict=file_list)
+        populate_cdm_source_files = populate_cdm_source_file.expand(site_to_process=unprocessed_sites)
+
+        file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file >> populate_cdm_source_files
+
+    # Filtering task group: retrieve Connect data, then filter participants
+    with TaskGroup(group_id="filtering", tooltip="Filter participants using Connect reference data") as filtering_group:
+        connect_data = retrieve_connect_data.expand(site_to_process=unprocessed_sites)
+        filter_file = filter_participants.expand(file_config_dict=file_list)
+
+        connect_data >> filter_file
 
     # Vocab harmonization task group with 8 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
@@ -970,23 +1029,24 @@ with dag:
 
     clean = cleanup(sites_to_process=unprocessed_sites)
 
-    # Generate delivery report CSV file
-    run_report = generate_report_csv.expand(site_to_process=unprocessed_sites)
+    # Reporting task group: generate artifacts in parallel, then consolidate
+    with TaskGroup(group_id="reporting", tooltip="Generate delivery report artifacts in parallel and consolidate") as reporting_group:
+        report_artifact_configs = create_report_artifact_configs(sites_to_process=unprocessed_sites)
+        run_report_artifacts = generate_report_artifact.expand(report_artifact_config=report_artifact_configs)
+        run_report_consolidate = consolidate_report.expand(site_to_process=unprocessed_sites)
 
-    # Run Data Quality Dashboard after loading data
-    run_dqd = dqd.expand(site_to_process=unprocessed_sites)
+        report_artifact_configs >> run_report_artifacts >> run_report_consolidate
 
-    # Run Achilles analyses after loading data
-    run_achilles = achilles.expand(site_to_process=unprocessed_sites)
+    # Analysis task group: DQD, Achilles, PASS in parallel, then Atlas tables and delivery report
+    with TaskGroup(group_id="analysis", tooltip="Run analytics (DQD, Achilles, PASS) and generate delivery report") as analysis_group:
+        run_dqd = dqd.expand(site_to_process=unprocessed_sites)
+        run_achilles = achilles.expand(site_to_process=unprocessed_sites)
+        run_pass = pass_analysis.expand(site_to_process=unprocessed_sites)
+        create_atlas_tables = atlas_results_tables.expand(site_to_process=unprocessed_sites)
+        gen_delivery_report = generate_delivery_report.expand(site_to_process=unprocessed_sites)
 
-    # Run PASS (Profile of Analytic Suitability Score) analysis after loading data
-    run_pass = pass_analysis.expand(site_to_process=unprocessed_sites)
-
-    # Create Atlas results tables after analyses complete
-    create_atlas_tables = atlas_results_tables.expand(site_to_process=unprocessed_sites)
-
-    # Generate interactive HTML delivery report after analyses complete
-    gen_delivery_report = generate_delivery_report.expand(site_to_process=unprocessed_sites)
+        [run_dqd, run_achilles, run_pass] >> create_atlas_tables
+        [run_dqd, run_achilles, run_pass] >> gen_delivery_report
 
     # Mark deliveries as complete after all analyses finish
     mark_complete = mark_delivery_complete(sites_to_process=unprocessed_sites)
@@ -994,19 +1054,8 @@ with dag:
     # Final log_done task runs regardless of task outcomes.
     all_done = log_done()
 
-    # Expand the new populate_cdm_source_file task
-    populate_cdm_source_files = populate_cdm_source_file.expand(site_to_process=unprocessed_sites)
-
     # Set task dependencies
-    api_health_check >> unprocessed_sites >> sites_exist >> file_list
-    file_list >> process_files >> validate_files >> fix_data_file >> upgrade_file
-
-    # Order of operations:
-    # 1. Upgrade each file to the target CDM version when needed.
-    # 2. Export site-level Connect reference data once per delivery.
-    # 3. Filter each file using the exported Connect participant data.
-    # 4. Populate cdm_source after file-level filtering completes.
-    upgrade_file >> connect_data >> filter_file >> populate_cdm_source_files >> vocab_harmonization_group
+    api_health_check >> unprocessed_sites >> sites_exist >> process_delivery_group >> filtering_group >> vocab_harmonization_group
 
     # Generate derived tables from harmonized data (AFTER vocab harmonization, BEFORE BQ load)
     vocab_harmonization_group >> generate_derived_tables_group
@@ -1017,12 +1066,8 @@ with dag:
     # Continue with remaining tasks after loading dataset
     load_to_bigquery_group >> clean
 
-    # Generate report CSV, then run analytics tasks in parallel (DQD, Achilles, PASS)
-    clean >> run_report >> [run_dqd, run_achilles, run_pass]
-
-    # After all analytics complete, create Atlas tables and generate delivery report in parallel
-    [run_dqd, run_achilles, run_pass] >> create_atlas_tables >> mark_complete
-    [run_dqd, run_achilles, run_pass] >> gen_delivery_report >> mark_complete
+    # Reporting then analysis
+    clean >> reporting_group >> analysis_group >> mark_complete
 
     # Final logging
     mark_complete >> all_done

@@ -61,6 +61,19 @@ DRUG_ERA = "drug_era"
 OBSERVATION_PERIOD = "observation_period"
 DERIVED_DATA_TABLES: list = [DRUG_ERA, CONDITION_ERA, OBSERVATION_PERIOD]
 
+# Report artifact types (must match ccc-omop-file-processor REPORT_ARTIFACT_* constants)
+REPORT_ARTIFACT_TYPES: list = [
+    "metadata",
+    "type_concept_breakdown",
+    "vocabulary_breakdown",
+    "date_datetime_defaults",
+    "invalid_concept_ids",
+    "person_id_integrity",
+    "final_row_counts",
+    "time_series",
+]
+REPORT_ARTIFACT_CONSOLIDATE = "consolidate"
+
 CSV = ".csv"
 CSV_GZ = ".csv.gz"
 PARQUET = ".parquet"
