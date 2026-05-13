@@ -37,7 +37,8 @@ def generate_cdm_source_json(site: str, delivery_date: str) -> dict:
         "cdm_version": config.omop_version,
         "bucket": config.gcs_bucket,
         "project_id": config.project_id,
-        "dataset_id": config.cdm_dataset_id
+        "dataset_id": config.cdm_dataset_id,
+        "date_format": config.date_format, # used to try parsing incoming cdm_source dates
     }
 
     return cdm_source
