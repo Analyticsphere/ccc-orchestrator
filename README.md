@@ -116,12 +116,14 @@ The `vocab_harmonization` task group runs these steps in order:
 1. `harmonize_vocab_source_target`
 2. `harmonize_vocab_target_remap`
 3. `harmonize_vocab_target_replacement`
-4. `harmonize_vocab_domain_check`
-5. `harmonize_vocab_omop_etl`
-6. `harmonize_vocab_consolidate`
-7. `harmonize_vocab_discover_tables`
-8. `flatten_table_configs`
-9. `harmonize_vocab_deduplicate_table`
+4. `harmonize_vocab_source_concept_override`
+5. `harmonize_vocab_domain_check`
+6. `harmonize_vocab_secondary_concept_override`
+7. `harmonize_vocab_omop_etl`
+8. `harmonize_vocab_consolidate`
+9. `harmonize_vocab_discover_tables`
+10. `flatten_table_configs`
+11. `harmonize_vocab_deduplicate_table`
 
 Only tables listed in `VOCAB_HARMONIZED_TABLES` are processed by these steps.
 
