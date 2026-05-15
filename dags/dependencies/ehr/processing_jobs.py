@@ -167,7 +167,8 @@ def run_harmonize_vocab_job(
         project_id: GCP project ID
         dataset_id: BigQuery dataset ID
         step: Harmonization step name (source_target, target_remap, target_replacement,
-              domain_check, omop_etl, consolidate_etl, discover_tables_for_dedup, deduplicate_single_table)
+              source_concept_override, domain_check, secondary_concept_override,
+              omop_etl, consolidate_etl, discover_tables_for_dedup, deduplicate_single_table)
         context: Airflow task context
         output_gcs_path: Optional GCS path to write results (for discover_tables step)
         delivery_date: Optional delivery date for logging context

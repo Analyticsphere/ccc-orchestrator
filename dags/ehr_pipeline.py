@@ -363,9 +363,33 @@ def harmonize_vocab_target_replacement(file_config_dict: dict) -> None:
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
 @log_task_execution()
+def harmonize_vocab_source_concept_override(file_config_dict: dict) -> None:
+    """
+    Step 4: Override primary concept_id from source_concept_id when concept_id is zero.
+    """
+    fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
+
+    if not vocab.should_harmonize_table(table_name=fc.table_name):
+        raise AirflowSkipException
+
+    config = SiteConfig(site=fc.site)
+
+    processing_jobs.run_harmonize_vocab_job(
+        file_path=fc.file_path,
+        site=fc.site,
+        project_id=config.project_id,
+        dataset_id=config.cdm_dataset_id,
+        step=constants.SOURCE_CONCEPT_OVERRIDE,
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
+    )
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+@log_task_execution()
 def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
     """
-    Step 4: Execute domain_check vocabulary harmonization.
+    Step 5: Execute domain_check vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -390,9 +414,33 @@ def harmonize_vocab_domain_check(file_config_dict: dict) -> None:
 
 @task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
 @log_task_execution()
+def harmonize_vocab_secondary_concept_override(file_config_dict: dict) -> None:
+    """
+    Step 6: Override non-primary concept_id columns from their source_concept_id counterparts.
+    """
+    fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
+
+    if not vocab.should_harmonize_table(table_name=fc.table_name):
+        raise AirflowSkipException
+
+    config = SiteConfig(site=fc.site)
+
+    processing_jobs.run_harmonize_vocab_job(
+        file_path=fc.file_path,
+        site=fc.site,
+        project_id=config.project_id,
+        dataset_id=config.cdm_dataset_id,
+        step=constants.SECONDARY_CONCEPT_OVERRIDE,
+        context=TaskContext.get_context(),
+        delivery_date=fc.delivery_date
+    )
+
+
+@task(max_active_tis_per_dag=24, trigger_rule="none_failed", execution_timeout=timedelta(minutes=constants.VOCAB_TIME_MIN))
+@log_task_execution()
 def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
     """
-    Step 5: Execute omop_etl vocabulary harmonization.
+    Step 7: Execute omop_etl vocabulary harmonization.
     """
     fc = file_config.FileConfig.from_dict(config_dict=file_config_dict)
 
@@ -419,7 +467,7 @@ def harmonize_vocab_omop_etl(file_config_dict: dict) -> None:
 @log_task_execution()
 def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
     """
-    Step 6: Combine and deduplicate ETL files after vocabulary harmonization.
+    Step 8: Combine and deduplicate ETL files after vocabulary harmonization.
     This occurs once per site; not per file
     """
     site, delivery_date = site_to_process
@@ -441,7 +489,7 @@ def harmonize_vocab_consolidate(site_to_process: tuple[str, str]) -> None:
 @log_task_execution()
 def harmonize_vocab_discover_tables(site_to_process: tuple[str, str]) -> list[dict]:
     """
-    Step 7: Discover all tables that need primary key deduplication.
+    Step 9: Discover all tables that need primary key deduplication.
     This occurs once per site and returns a list of table configurations for parallel processing.
     """
     site, delivery_date = site_to_process
@@ -480,7 +528,7 @@ def flatten_table_configs(table_configs_by_site: list[list[dict]]) -> list[dict]
 @log_task_execution()
 def harmonize_vocab_deduplicate_table(table_config: dict) -> None:
     """
-    Step 8: Deduplicate primary keys for a single table.
+    Step 10: Deduplicate primary keys for a single table.
     This runs in parallel for each table that needs deduplication.
     """
     # Deduplicate primary keys for this specific table
@@ -974,27 +1022,29 @@ with dag:
 
         connect_data >> filter_file
 
-    # Vocab harmonization task group with 8 steps (plus a flattening helper)
+    # Vocab harmonization task group with 10 steps (plus a flattening helper)
     with TaskGroup(group_id="vocab_harmonization", tooltip="Multi-step vocabulary harmonization process") as vocab_harmonization_group:
         # Each step is expanded across all file configs and executes in order
         vocab_step1_source_target = harmonize_vocab_source_target.expand(file_config_dict=file_list)
         vocab_step2_target_remap = harmonize_vocab_target_remap.expand(file_config_dict=file_list)
         vocab_step3_target_replacement = harmonize_vocab_target_replacement.expand(file_config_dict=file_list)
-        vocab_step4_domain_check = harmonize_vocab_domain_check.expand(file_config_dict=file_list)
-        vocab_step5_omop_etl = harmonize_vocab_omop_etl.expand(file_config_dict=file_list)
-        vocab_step6_consolidate = harmonize_vocab_consolidate.expand(site_to_process=unprocessed_sites)
+        vocab_step4_source_concept_override = harmonize_vocab_source_concept_override.expand(file_config_dict=file_list)
+        vocab_step5_domain_check = harmonize_vocab_domain_check.expand(file_config_dict=file_list)
+        vocab_step6_secondary_concept_override = harmonize_vocab_secondary_concept_override.expand(file_config_dict=file_list)
+        vocab_step7_omop_etl = harmonize_vocab_omop_etl.expand(file_config_dict=file_list)
+        vocab_step8_consolidate = harmonize_vocab_consolidate.expand(site_to_process=unprocessed_sites)
 
-        # Step 7: Discover tables for deduplication (per site)
-        vocab_step7_discover = harmonize_vocab_discover_tables.expand(site_to_process=unprocessed_sites)
+        # Step 9: Discover tables for deduplication (per site)
+        vocab_step9_discover = harmonize_vocab_discover_tables.expand(site_to_process=unprocessed_sites)
 
-        # Step 7b: Flatten all table configs from all sites into a single list
-        vocab_step7b_flatten = flatten_table_configs(table_configs_by_site=vocab_step7_discover)
+        # Step 9b: Flatten all table configs from all sites into a single list
+        vocab_step9b_flatten = flatten_table_configs(table_configs_by_site=vocab_step9_discover)
 
-        # Step 8: Deduplicate each table in parallel (mapped per table)
-        vocab_step8_deduplicate = harmonize_vocab_deduplicate_table.expand(table_config=vocab_step7b_flatten)
+        # Step 10: Deduplicate each table in parallel (mapped per table)
+        vocab_step10_deduplicate = harmonize_vocab_deduplicate_table.expand(table_config=vocab_step9b_flatten)
 
-        # Chain the 8 vocabulary harmonization steps sequentially within the group
-        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_domain_check >> vocab_step5_omop_etl >> vocab_step6_consolidate >> vocab_step7_discover >> vocab_step7b_flatten >> vocab_step8_deduplicate
+        # Chain the 10 vocabulary harmonization steps sequentially within the group
+        vocab_step1_source_target >> vocab_step2_target_remap >> vocab_step3_target_replacement >> vocab_step4_source_concept_override >> vocab_step5_domain_check >> vocab_step6_secondary_concept_override >> vocab_step7_omop_etl >> vocab_step8_consolidate >> vocab_step9_discover >> vocab_step9b_flatten >> vocab_step10_deduplicate
 
     # Derived table generation task group
     with TaskGroup(group_id="generate_derived_tables", tooltip="Generate derived tables from harmonized data") as generate_derived_tables_group:
